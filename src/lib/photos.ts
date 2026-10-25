@@ -42,9 +42,25 @@ export async function makeThumb(source: HTMLImageElement | HTMLCanvasElement) {
 }
 
 // Shrinks a camera photo to a sensible size so the phone doesn't fill up.
-export async function savePhotoFile(file: Blob): Promise<string> {
+// Phone cameras sometimes hand over a photo with no file type, so decode
+// whatever comes in rather than trusting the label.
+async function decodePhoto(file: Blob): Promise<{ src: CanvasImageSource; w: number; h: number; done: () => void }> {
+  if ("createImageBitmap" in window) {
+    try {
+      const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+      return { src: bmp, w: bmp.width, h: bmp.height, done: () => bmp.close() };
+    } catch {
+      /* fall back to an <img> below */
+    }
+  }
   const img = await loadImage(file);
-  const full = drawScaled(img, img.naturalWidth, img.naturalHeight, MAX_SIDE);
+  return { src: img, w: img.naturalWidth, h: img.naturalHeight, done: () => {} };
+}
+
+export async function savePhotoFile(file: Blob): Promise<string> {
+  const pic = await decodePhoto(file);
+  const full = drawScaled(pic.src, pic.w, pic.h, MAX_SIDE);
+  pic.done();
   const blob = await canvasToBlob(full);
   const thumb = await makeThumb(full);
   const photo: Photo = {
@@ -59,17 +75,18 @@ export async function savePhotoFile(file: Blob): Promise<string> {
   return photo.id;
 }
 
-export async function savePhotoFiles(files: FileList | File[]): Promise<string[]> {
+export async function savePhotoFiles(files: FileList | File[]): Promise<{ ids: string[]; failed: number }> {
   const ids: string[] = [];
+  let failed = 0;
   for (const f of Array.from(files)) {
-    if (!f.type.startsWith("image/")) continue;
     try {
       ids.push(await savePhotoFile(f));
     } catch (e) {
+      failed++;
       console.warn("Photo skipped", e);
     }
   }
-  return ids;
+  return { ids, failed };
 }
 
 // Object URL for a stored photo that follows edits (markup) automatically.

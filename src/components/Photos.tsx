@@ -63,9 +63,9 @@ export function AddPhotoButtons({ onAdded, compact }: { onAdded: (ids: string[])
     if (!files?.length) return;
     setBusy(true);
     try {
-      const ids = await savePhotoFiles(files);
+      const { ids, failed } = await savePhotoFiles(files);
       if (ids.length) onAdded(ids);
-      if (ids.length < files.length) toast("Some photos couldn't be added");
+      if (failed) toast("Some photos couldn't be added");
     } finally {
       setBusy(false);
       if (cam.current) cam.current.value = "";
