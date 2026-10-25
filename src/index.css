@@ -206,3 +206,72 @@ body {
     animation: none;
   }
 }
+
+/* Tasks tick-off, as on the Titus subbie link: pop, sparks, strike, slide away. */
+@keyframes tick-pop {
+  40% {
+    transform: scale(1.35);
+  }
+}
+.tick-pop {
+  animation: tick-pop 350ms ease-out;
+}
+@keyframes strike-draw {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+.strike-draw {
+  animation: strike-draw 260ms ease-out forwards;
+}
+@keyframes spark {
+  from {
+    opacity: 1;
+    transform: rotate(var(--a)) translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: rotate(var(--a)) translateX(26px);
+  }
+}
+.spark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 2px;
+  margin: -1px 0 0 -3px;
+  border-radius: 1px;
+  background: #16a34a;
+  pointer-events: none;
+  animation: spark 420ms ease-out forwards;
+}
+.task-row {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition:
+    grid-template-rows 460ms ease 300ms,
+    opacity 460ms ease 300ms,
+    transform 460ms ease 300ms;
+}
+.task-row > * {
+  min-height: 0;
+}
+.task-leaving {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: translateX(40px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tick-pop,
+  .strike-draw,
+  .spark {
+    animation: none;
+  }
+  .task-row {
+    transition: none;
+  }
+}

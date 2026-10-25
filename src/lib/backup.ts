@@ -38,7 +38,7 @@ export async function exportBackup(): Promise<File> {
   const data: BackupFile = { app: "home-diary", version: 1, exportedAt: Date.now(), jobs, notes, photos: photosOut };
   const d = new Date();
   const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  return new File([JSON.stringify(data)], `home-diary-backup-${stamp}.json`, { type: "application/json" });
+  return new File([JSON.stringify(data)], `home-task-backup-${stamp}.json`, { type: "application/json" });
 }
 
 export async function shareOrDownload(file: File) {
@@ -62,7 +62,7 @@ export async function shareOrDownload(file: File) {
 
 export async function importBackup(file: File, mode: "merge" | "replace") {
   const data = JSON.parse(await file.text()) as BackupFile;
-  if (data.app !== "home-diary" || !Array.isArray(data.jobs)) throw new Error("That file isn't a Home Diary backup");
+  if (data.app !== "home-diary" || !Array.isArray(data.jobs)) throw new Error("That file isn't a Home Task backup");
   const photos: Photo[] = [];
   for (const p of data.photos ?? []) {
     photos.push({

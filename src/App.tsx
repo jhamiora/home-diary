@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { ClipboardList, Menu, Package, Sun, type LucideIcon } from "lucide-react";
+import { ClipboardList, ListChecks, Menu, Package, type LucideIcon } from "lucide-react";
 import { ToastProvider, useStoredState } from "./lib/ui";
 import { OpenJobCtx } from "./components/JobRow";
 import { JobDetail } from "./components/JobDetail";
-import { TodayPage } from "./pages/TodayPage";
+import { TasksPage } from "./pages/TasksPage";
 import { SiteDiaryPage } from "./pages/SiteDiaryPage";
 import { MaterialsPage } from "./pages/MaterialsPage";
 import { GoTabCtx, type Tab } from "./lib/nav";
@@ -11,14 +11,14 @@ import { MorePage } from "./pages/MorePage";
 
 
 const TABS: { id: Tab; label: string; Icon: LucideIcon }[] = [
-  { id: "today", label: "Today", Icon: Sun },
+  { id: "tasks", label: "Tasks", Icon: ListChecks },
   { id: "site", label: "Task Builder", Icon: ClipboardList },
   { id: "materials", label: "Materials", Icon: Package },
   { id: "more", label: "More", Icon: Menu },
 ];
 
 const PAGES: Record<Tab, () => React.JSX.Element> = {
-  today: TodayPage,
+  tasks: TasksPage,
   site: SiteDiaryPage,
   materials: MaterialsPage,
   more: MorePage,
@@ -26,7 +26,7 @@ const PAGES: Record<Tab, () => React.JSX.Element> = {
 
 export default function App() {
   const [stored, setTab] = useStoredState<string>("tab", "site");
-  const tab: Tab = (["today", "site", "materials", "more"] as string[]).includes(stored) ? (stored as Tab) : "site";
+  const tab: Tab = (["tasks", "site", "materials", "more"] as string[]).includes(stored) ? (stored as Tab) : "site";
   const [jobId, setJobId] = useState<string | null>(null);
 
   return (

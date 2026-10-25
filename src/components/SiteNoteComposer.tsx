@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Camera, CheckCircle, ImagePlus, MapPin, Mic, Package, PenLine, Square, Sun, X } from "lucide-react";
+import { Camera, CheckCircle, ImagePlus, MapPin, Mic, Package, PenLine, Square, X } from "lucide-react";
 import { PRIORITIES, askPersistentStorage, db, dayKey, uid, type Job, type Material, type Priority } from "../lib/db";
 import { OUTSIDE, WHOLE_HOUSE, parseMaterial, placeLabel, usePlaces } from "../lib/places";
 import { lineLabel } from "../lib/materials";
@@ -297,36 +297,31 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
           </button>
         </div>
 
-        <div className="flex min-w-0 gap-1.5">
-          <button
-            ref={placeBtn}
-            type="button"
-            onClick={() => setPlaceOpen(true)}
-            className="flex h-8 min-w-0 items-center gap-1.5 rounded border border-line px-2 text-[13px] font-medium"
-          >
-            <MapPin size={13} className="shrink-0 text-muted" />
-            <span className="truncate">{placeSummary}</span>
-          </button>
-          <button
-            ref={priorityBtn}
-            type="button"
-            onClick={() => setPriorityOpen(true)}
-            className="flex h-8 shrink-0 items-center gap-[7px] rounded border border-line px-2 text-[13px] font-medium"
-          >
-            <span className={`h-2 w-2 rounded-[2px] ${PRIORITY_DOT[draft.priority]}`} />
-            {priorityLabel}
-          </button>
-          <button
-            type="button"
-            aria-pressed={draft.today}
-            onClick={() => patch({ today: !draft.today })}
-            className={`flex h-8 shrink-0 items-center gap-1.5 rounded border px-2 text-[13px] font-medium ${
-              draft.today ? "border-navy bg-navy text-white" : "border-line text-muted"
-            }`}
-          >
-            <Sun size={13} fill={draft.today ? "currentColor" : "none"} />
-            Do today
-          </button>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="min-w-0">
+            <div className="mb-1 text-[11px] text-muted">Location</div>
+            <button
+              ref={placeBtn}
+              type="button"
+              onClick={() => setPlaceOpen(true)}
+              className="flex h-9 w-full min-w-0 items-center gap-1.5 rounded border border-line px-2.5 text-[13px] font-medium"
+            >
+              <MapPin size={13} className="shrink-0 text-muted" />
+              <span className="truncate">{placeSummary}</span>
+            </button>
+          </div>
+          <div className="min-w-0">
+            <div className="mb-1 text-[11px] text-muted">Priority</div>
+            <button
+              ref={priorityBtn}
+              type="button"
+              onClick={() => setPriorityOpen(true)}
+              className="flex h-9 w-full items-center gap-[7px] rounded border border-line px-2.5 text-[13px] font-medium"
+            >
+              <span className={`h-2 w-2 shrink-0 rounded-[2px] ${PRIORITY_DOT[draft.priority]}`} />
+              {priorityLabel}
+            </button>
+          </div>
         </div>
 
         {showMaterial && (

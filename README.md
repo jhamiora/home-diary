@@ -1,4 +1,4 @@
-# Home Diary
+# Home Task
 
 A small phone app for jobs around the house, modelled on the Titus PM site diary.
 

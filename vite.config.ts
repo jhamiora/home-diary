@@ -12,8 +12,8 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["icon.svg", "apple-touch-icon.png"],
       manifest: {
-        name: "Home Diary",
-        short_name: "Home Diary",
+        name: "Home Task",
+        short_name: "Home Task",
         description: "Jobs, materials and a photo diary for around the house. Everything stays on your phone.",
         theme_color: "#062932",
         background_color: "#ffffff",
