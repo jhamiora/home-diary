@@ -3,11 +3,9 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { CheckCircle2, ChevronDown, MapPin, Plus, Search, X } from "lucide-react";
 import { db, dayKey, isOpen, type Job } from "../lib/db";
 import { OUTSIDE, WHOLE_HOUSE, placeLabel, usePlaces } from "../lib/places";
-import { Pop, Switch, formatDay, useStoredState } from "../lib/ui";
+import { Pop, Switch, useStoredState } from "../lib/ui";
 import { SiteNoteComposer } from "../components/SiteNoteComposer";
 import { SiteNoteCard } from "../components/SiteNoteCard";
-
-type View = "list" | "places" | "dates";
 
 // Highest priority first, newest first within a priority.
 const diaryOrder = (a: Job, b: Job) => a.priority - b.priority || b.createdAt - a.createdAt;
@@ -17,7 +15,6 @@ export function SiteDiaryPage() {
   const { places } = usePlaces();
   // The box stays open after each note; only the X folds it away.
   const [composerOpen, setComposerOpen] = useStoredState("diary:composerOpen", true);
-  const [view, setView] = useStoredState<View>("diary:view", "list");
   const [search, setSearch] = useState("");
   const [place, setPlace] = useStoredState<string | null>("diary:place", null);
   const [todayOnly, setTodayOnly] = useStoredState("diary:todayOnly", false);
@@ -41,21 +38,6 @@ export function SiteDiaryPage() {
     <SiteNoteCard key={j.id} job={j} expanded={expanded === j.id} onToggle={() => setExpanded(expanded === j.id ? null : j.id)} />
   );
 
-  const groups: [string, Job[]][] = [];
-  if (view === "places") {
-    for (const p of [WHOLE_HOUSE, OUTSIDE, ...places]) {
-      const list = open.filter((j) => j.area === p);
-      if (list.length) groups.push([placeLabel(p), list]);
-    }
-  } else if (view === "dates") {
-    const byDay = new Map<string, Job[]>();
-    for (const j of [...open].sort((a, b) => b.createdAt - a.createdAt)) {
-      const k = dayKey(new Date(j.createdAt));
-      byDay.set(k, [...(byDay.get(k) ?? []), j]);
-    }
-    for (const [, list] of byDay) groups.push([formatDay(list[0].createdAt), list]);
-  }
-
   return (
     <div className="pb-24">
       <div className="sticky top-0 z-30 border-b border-line bg-white/95 backdrop-blur">
@@ -63,13 +45,6 @@ export function SiteDiaryPage() {
           <div>
             <h1 className="font-display text-[20px] font-extrabold uppercase leading-none tracking-[-0.02em]">Task Builder</h1>
             <p className="mt-1 text-[11px] tracking-[0.04em] text-muted">Jobs, photos &amp; materials around the house</p>
-          </div>
-          <div className="seg shrink-0">
-            {(["list", "places", "dates"] as View[]).map((v) => (
-              <button key={v} aria-pressed={view === v} onClick={() => setView(v)} className="!h-8 px-2.5 !text-[12px] capitalize">
-                {v}
-              </button>
-            ))}
           </div>
         </div>
       </div>
@@ -132,21 +107,7 @@ export function SiteDiaryPage() {
           </div>
         )}
 
-        {view === "list" ? (
-          <div className="space-y-2">{open.map(card)}</div>
-        ) : (
-          <div className="space-y-4">
-            {groups.map(([label, list]) => (
-              <div key={label}>
-                <div className="mb-2 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.06em] text-muted">
-                  {label}
-                  <span className="font-normal">{list.length}</span>
-                </div>
-                <div className="space-y-2">{list.map(card)}</div>
-              </div>
-            ))}
-          </div>
-        )}
+        <div className="space-y-2">{open.map(card)}</div>
 
         {showCompleted && completed.length > 0 && (
           <div>
