@@ -144,6 +144,7 @@ export function TasksPage() {
   const tick = (job: Job) => {
     if (job.status === "done") {
       setDone(job, false);
+      toast(`Back on the list: ${job.title}`);
       return;
     }
     if (leaving.includes(job.id)) return;
@@ -298,7 +299,12 @@ export function TasksPage() {
               </span>
               <ChevronDown size={16} className={showDone ? "rotate-180" : ""} />
             </button>
-            {showDone && <div className="mt-2 grid grid-cols-1 gap-2">{done.map(row)}</div>}
+            {showDone && (
+              <>
+                <p className="px-1 pt-2 text-[12px] text-muted">Tap the green tick to bring a task back.</p>
+                <div className="mt-2 grid grid-cols-1 gap-2">{done.map(row)}</div>
+              </>
+            )}
           </div>
         )}
       </div>
