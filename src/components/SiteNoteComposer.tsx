@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { Camera, Check, CheckCircle, ChevronDown, ImagePlus, Mic, Package, PenLine, Plus, Search, Square, Sun, X } from "lucide-react";
+import { Camera, CheckCircle, ChevronDown, ImagePlus, Mic, Package, PenLine, Square, Sun, X } from "lucide-react";
 import { PRIORITIES, askPersistentStorage, db, dayKey, uid, type Job, type Material, type Priority } from "../lib/db";
-import { OUTSIDE, WHOLE_HOUSE, parseMaterial, placeLabel, usePeople, usePlaces } from "../lib/places";
+import { OUTSIDE, WHOLE_HOUSE, parseMaterial, placeLabel, usePlaces } from "../lib/places";
 import { lineLabel } from "../lib/materials";
 import { savePhotoFiles, usePhotoUrl } from "../lib/photos";
-import { MenuLabel, Pop, Screen, Switch, useStoredState, useToast } from "../lib/ui";
+import { MenuLabel, Pop, useStoredState, useToast } from "../lib/ui";
 import { PhotoViewer } from "./Photos";
 import { MarkupEditor } from "./MarkupEditor";
 
 /*
  * The Titus site diary "New site note" box, for the house. Same order:
- * words with the mic, then Search who / Photo / Add note, then
- * Place / Multi / Priority / More, then materials, photos and the switches.
- * Units are parts of the house; subbies are whoever is doing it.
+ * words with the mic, then Materials / Photo / Add note, then
+ * Place / Multi / Priority / Today, then materials and photos.
+ * Units are parts of the house. The box stays open after each note.
  */
 
 const MAX_PHOTOS = 10;
@@ -27,7 +27,6 @@ interface Draft {
   text: string;
   photoIds: string[];
   materials: Omit<Material, "have">[];
-  who: string[];
   priority: Priority;
   today: boolean;
 }
@@ -36,7 +35,6 @@ const emptyDraft = (keep?: Partial<Draft>): Draft => ({
   text: "",
   photoIds: [],
   materials: [],
-  who: [],
   priority: 2,
   today: false,
   ...keep,
@@ -83,88 +81,6 @@ function StagedThumb({ id, onView, onMarkup, onRemove }: { id: string; onView: (
   );
 }
 
-function WhoSheet({
-  open,
-  onClose,
-  picked,
-  onToggle,
-}: {
-  open: boolean;
-  onClose: () => void;
-  picked: string[];
-  onToggle: (name: string) => void;
-}) {
-  const { people, addPerson } = usePeople();
-  const [q, setQ] = useState("");
-  const input = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (open) {
-      setQ("");
-      setTimeout(() => input.current?.focus({ preventScroll: true }), 50);
-    }
-  }, [open]);
-  const query = q.trim().toLowerCase();
-  const list = people.filter((p) => !query || p.toLowerCase().includes(query));
-  const exact = people.some((p) => p.toLowerCase() === query);
-  return (
-    <Screen
-      open={open}
-      onClose={onClose}
-      title="Who's doing it?"
-      right={
-        <button className="btn btn-primary mr-1 h-9 px-4 text-[14px]" onClick={onClose}>
-          Done
-        </button>
-      }
-    >
-      <div className="sticky top-0 z-10 border-b border-line bg-white p-3">
-        <div className="relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-          <input
-            ref={input}
-            className="field pl-9"
-            placeholder="Search or add a name, e.g. Me, Dad, Sparky"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && q.trim()) {
-                const name = exact ? people.find((p) => p.toLowerCase() === query)! : addPerson(q);
-                if (!picked.includes(name)) onToggle(name);
-                setQ("");
-              }
-            }}
-          />
-        </div>
-      </div>
-      {q.trim() && !exact && (
-        <button
-          className="flex w-full items-center gap-3 border-b border-line px-4 py-3 text-left text-[15px] text-navy active:bg-soft"
-          onClick={() => {
-            const name = addPerson(q);
-            if (!picked.includes(name)) onToggle(name);
-            setQ("");
-          }}
-        >
-          <Plus size={18} />
-          Add "{q.trim()}"
-        </button>
-      )}
-      {list.map((p) => {
-        const on = picked.includes(p);
-        return (
-          <button key={p} className="flex w-full items-center gap-3 border-b border-line px-4 py-3 text-left text-[15px] active:bg-soft" onClick={() => onToggle(p)}>
-            <span role="checkbox" aria-checked={on} className="check">
-              {on && <Check size={14} strokeWidth={3} />}
-            </span>
-            {p}
-          </button>
-        );
-      })}
-      {!people.length && !q.trim() && <p className="px-4 py-6 text-[14px] text-muted">Type a name to add who's doing the work.</p>}
-    </Screen>
-  );
-}
-
 export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; onAdded?: (ids: string[]) => void }) {
   const toast = useToast();
   const { places, addPlace } = usePlaces();
@@ -172,23 +88,18 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
   // The place sticks between notes, like the site diary's unit.
   const [picked, setPicked] = useStoredState<string[]>("composer:places", [WHOLE_HOUSE]);
   const [multi, setMulti] = useStoredState("composer:multi", false);
-  const [addAnother, setAddAnother] = useStoredState("composer:addAnother", false);
-  const [keepWho, setKeepWho] = useStoredState("composer:keepWho", false);
   const [showMaterial, setShowMaterial] = useState(draft.materials.length > 0);
   const [materialText, setMaterialText] = useState("");
   const [newPlace, setNewPlace] = useState("");
   const [placeOpen, setPlaceOpen] = useState(false);
   const [priorityOpen, setPriorityOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
   const [photoMenu, setPhotoMenu] = useState(false);
-  const [whoOpen, setWhoOpen] = useState(false);
   const [viewAt, setViewAt] = useState<number | null>(null);
   const [markupId, setMarkupId] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
   const [busy, setBusy] = useState(false);
   const placeBtn = useRef<HTMLButtonElement>(null);
   const priorityBtn = useRef<HTMLButtonElement>(null);
-  const moreBtn = useRef<HTMLButtonElement>(null);
   const photoBtn = useRef<HTMLButtonElement>(null);
   const camInput = useRef<HTMLInputElement>(null);
   const galInput = useRef<HTMLInputElement>(null);
@@ -199,7 +110,6 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
   const validPicked = picked.filter((p) => p === WHOLE_HOUSE || p === OUTSIDE || places.includes(p));
   const placesPicked = validPicked.length ? validPicked : [WHOLE_HOUSE];
   const placeSummary = placesPicked.length > 1 ? `${placesPicked.length} places` : placeLabel(placesPicked[0]);
-  const moreCount = draft.materials.length + (draft.today ? 1 : 0);
 
   useEffect(() => () => rec.current?.stop(), []);
 
@@ -296,7 +206,6 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
           priority: draft.priority,
           area: placesPicked[i],
           status: "open",
-          who: draft.who,
           createdAt: now + i,
           updatedAt: now + i,
           photoIds,
@@ -308,11 +217,10 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
       }
       askPersistentStorage();
       toast(ids.length > 1 ? `${ids.length} notes added` : "Note added");
-      setDraft(emptyDraft({ priority: draft.priority, who: addAnother && keepWho ? draft.who : [] }));
+      setDraft(emptyDraft({ priority: draft.priority }));
       setMaterialText("");
       onAdded?.(ids);
-      if (addAnother) textRef.current?.focus();
-      else onClose();
+      textRef.current?.focus();
     } finally {
       setBusy(false);
     }
@@ -365,11 +273,17 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
           <div className="flex items-center gap-2 pt-1">
             <button
               type="button"
-              onClick={() => setWhoOpen(true)}
-              className="flex h-9 min-w-9 flex-1 items-center gap-1.5 overflow-hidden rounded border border-line bg-white px-2.5 text-left text-[14px] text-muted"
+              aria-pressed={showMaterial}
+              onClick={() => setShowMaterial(!showMaterial)}
+              className={`relative flex h-9 min-w-9 flex-1 items-center justify-center gap-1.5 rounded border px-2.5 text-[14px] font-semibold ${
+                showMaterial ? "border-navy bg-navy text-white" : "border-navy text-navy"
+              }`}
             >
-              <Search size={16} className="shrink-0" />
-              <span className="truncate">{draft.who.length ? "Add who" : "Search who"}</span>
+              <Package size={16} className="shrink-0" />
+              <span className="truncate">Materials</span>
+              {draft.materials.length > 0 && (
+                <span className={`rounded px-1 text-[11px] ${showMaterial ? "bg-white/20" : "bg-navy text-white"}`}>{draft.materials.length}</span>
+              )}
             </button>
             <button
               type="button"
@@ -389,21 +303,6 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
               {placesPicked.length > 1 ? `Add ${placesPicked.length} notes` : "Add note"}
             </button>
           </div>
-          {draft.who.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 pt-1.5">
-              {draft.who.map((w) => (
-                <button
-                  key={w}
-                  type="button"
-                  onClick={() => patch({ who: draft.who.filter((x) => x !== w) })}
-                  className="inline-flex h-6 items-center gap-1 rounded border border-line px-2 text-[12px]"
-                >
-                  {w}
-                  <X size={11} className="text-muted" />
-                </button>
-              ))}
-            </div>
-          )}
         </div>
 
         <div className="flex min-w-0 items-center gap-1.5">
@@ -438,20 +337,15 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
             <ChevronDown size={12} className="opacity-50" />
           </button>
           <button
-            ref={moreBtn}
             type="button"
-            onClick={() => setMoreOpen(true)}
-            className={`relative flex h-9 min-w-[3.75rem] flex-1 items-center justify-center gap-1 rounded border px-1.5 text-[12px] font-medium ${
-              moreCount ? "border-navy text-navy" : "border-line"
+            aria-pressed={draft.today}
+            onClick={() => patch({ today: !draft.today })}
+            className={`flex h-9 min-w-[4.25rem] flex-1 items-center justify-center gap-1 rounded border px-1.5 text-[12px] font-medium ${
+              draft.today ? "border-navy bg-navy text-white" : "border-line text-muted"
             }`}
           >
-            <span>More</span>
-            {moreCount > 0 && (
-              <span className="pointer-events-none absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded bg-navy px-1 text-[10px] text-white">
-                {moreCount}
-              </span>
-            )}
-            <ChevronDown size={12} className="opacity-50" />
+            <Sun size={13} fill={draft.today ? "currentColor" : "none"} />
+            Today
           </button>
         </div>
 
@@ -510,27 +404,8 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
               <StagedThumb key={id} id={id} onView={() => setViewAt(i)} onMarkup={() => setMarkupId(id)} onRemove={() => removePhoto(id)} />
             ))}
           </div>
-          {(draft.today || draft.priority === 1) && (
-            <div className="flex max-w-[48%] shrink-0 flex-col items-end gap-1">
-              {draft.today && (
-                <button type="button" onClick={() => patch({ today: false })} className="inline-flex items-center gap-1 rounded bg-navy px-2 py-0.5 text-[11px] font-medium text-white">
-                  Today <X size={10} />
-                </button>
-              )}
-              {draft.priority === 1 && (
-                <button type="button" onClick={() => patch({ priority: 2 })} className="inline-flex items-center gap-1 rounded bg-high px-2 py-0.5 text-[11px] font-medium text-white">
-                  High <X size={10} />
-                </button>
-              )}
-            </div>
-          )}
         </div>
         {draft.photoIds.length > 0 && <p className="-mt-2 text-[11px] text-muted">Tap the pencil on a photo to mark it up before saving.</p>}
-
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <Switch on={addAnother} onChange={setAddAnother} label="Add another" />
-          {addAnother && <Switch on={keepWho} onChange={setKeepWho} label="Keep who" />}
-        </div>
 
         {placesPicked.length > 1 && (
           <p className="text-[12px] text-muted">{placesPicked.length} separate notes, one per place.</p>
@@ -601,37 +476,6 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
         ))}
       </Pop>
 
-      <Pop anchor={moreBtn} open={moreOpen} onClose={() => setMoreOpen(false)} align="end" width={260}>
-        <MenuLabel>Plan</MenuLabel>
-        <button
-          onClick={() => patch({ today: !draft.today })}
-          className={`flex w-full items-center gap-2 rounded px-3 py-2 text-[13px] font-medium ${draft.today ? "bg-navy text-white" : "bg-soft text-muted"}`}
-        >
-          <Sun size={13} /> Do today
-        </button>
-        <div className="mt-3 border-t border-line pt-1">
-          <MenuLabel>Add to lists</MenuLabel>
-          <button
-            onClick={() => {
-              setShowMaterial(!showMaterial);
-              setMoreOpen(false);
-            }}
-            className={`flex w-full items-center gap-2 rounded px-3 py-2 text-[13px] font-medium ${showMaterial ? "bg-navy text-white" : "bg-soft text-muted"}`}
-          >
-            <Package size={13} /> Material needed
-            {draft.materials.length > 0 && (
-              <span className="ml-auto rounded border border-[#bbe5c8] bg-[#effaf2] px-1 text-[10px] text-ok">{draft.materials.length}</span>
-            )}
-          </button>
-        </div>
-      </Pop>
-
-      <WhoSheet
-        open={whoOpen}
-        onClose={() => setWhoOpen(false)}
-        picked={draft.who}
-        onToggle={(name) => setDraft((d) => ({ ...d, who: d.who.includes(name) ? d.who.filter((w) => w !== name) : [...d.who, name] }))}
-      />
       {viewAt !== null && <PhotoViewer ids={draft.photoIds} start={viewAt} onClose={() => setViewAt(null)} onDelete={removePhoto} />}
       {markupId && <MarkupEditor photoId={markupId} onClose={() => setMarkupId(null)} />}
     </div>

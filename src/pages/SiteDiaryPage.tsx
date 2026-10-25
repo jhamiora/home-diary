@@ -1,8 +1,8 @@
 import { useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { CheckCircle2, ChevronDown, MapPin, Plus, Search, Users, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, MapPin, Plus, Search, X } from "lucide-react";
 import { db, dayKey, isOpen, type Job } from "../lib/db";
-import { OUTSIDE, WHOLE_HOUSE, placeLabel, usePeople, usePlaces } from "../lib/places";
+import { OUTSIDE, WHOLE_HOUSE, placeLabel, usePlaces } from "../lib/places";
 import { Pop, Switch, formatDay, useStoredState } from "../lib/ui";
 import { SiteNoteComposer } from "../components/SiteNoteComposer";
 import { SiteNoteCard } from "../components/SiteNoteCard";
@@ -15,31 +15,27 @@ const diaryOrder = (a: Job, b: Job) => a.priority - b.priority || b.createdAt - 
 export function SiteDiaryPage() {
   const jobs = useLiveQuery(() => db.jobs.toArray(), []);
   const { places } = usePlaces();
-  const { people } = usePeople();
-  const [draft] = useStoredState<{ text: string; photoIds: string[] }>("composer:draft", { text: "", photoIds: [] });
-  // The box shows open while a note is half written, like the site diary.
-  const [composerOpen, setComposerOpen] = useState(() => !!(draft.text.trim() || draft.photoIds.length));
+  // The box stays open after each note; only the X folds it away.
+  const [composerOpen, setComposerOpen] = useStoredState("diary:composerOpen", true);
   const [view, setView] = useStoredState<View>("diary:view", "list");
   const [search, setSearch] = useState("");
   const [place, setPlace] = useStoredState<string | null>("diary:place", null);
-  const [who, setWho] = useStoredState<string | null>("diary:who", null);
+  const [todayOnly, setTodayOnly] = useStoredState("diary:todayOnly", false);
   const [showCompleted, setShowCompleted] = useStoredState("diary:showCompleted", false);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [whoOpen, setWhoOpen] = useState(false);
   const [placeOpen, setPlaceOpen] = useState(false);
-  const whoBtn = useRef<HTMLButtonElement>(null);
   const placeBtn = useRef<HTMLButtonElement>(null);
 
   const q = search.trim().toLowerCase();
   const filtered = (jobs ?? []).filter(
     (j) =>
       (place === null || j.area === place) &&
-      (who === null || (j.who ?? []).includes(who)) &&
+      (!todayOnly || j.todayDate === dayKey()) &&
       (!q || j.title.toLowerCase().includes(q) || j.materials.some((m) => m.name.toLowerCase().includes(q))),
   );
   const open = filtered.filter(isOpen).sort(diaryOrder);
   const completed = filtered.filter((j) => !isOpen(j)).sort((a, b) => (b.doneAt ?? 0) - (a.doneAt ?? 0));
-  const hasFilters = !!q || place !== null || who !== null;
+  const hasFilters = !!q || place !== null || todayOnly;
 
   const card = (j: Job) => (
     <SiteNoteCard key={j.id} job={j} expanded={expanded === j.id} onToggle={() => setExpanded(expanded === j.id ? null : j.id)} />
@@ -98,15 +94,8 @@ export function SiteDiaryPage() {
               </button>
             )}
           </div>
-          <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] gap-2">
-            <button ref={whoBtn} className="flex h-9 min-w-0 items-center justify-between gap-2 rounded border border-line px-3 text-[14px]" onClick={() => setWhoOpen(true)}>
-              <span className="flex min-w-0 items-center gap-2">
-                <Users size={16} className="shrink-0 text-muted" />
-                <span className={`truncate ${who !== null ? "font-semibold text-navy" : ""}`}>{who ?? "Everyone"}</span>
-              </span>
-              <ChevronDown size={16} className="shrink-0 opacity-50" />
-            </button>
-            <button ref={placeBtn} className="flex h-9 min-w-0 items-center justify-between gap-2 rounded border border-line px-3 text-[14px]" onClick={() => setPlaceOpen(true)}>
+          <div>
+            <button ref={placeBtn} className="flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded border border-line px-3 text-[14px]" onClick={() => setPlaceOpen(true)}>
               <span className="flex min-w-0 items-center gap-2">
                 <MapPin size={16} className="shrink-0 text-muted" />
                 <span className={`truncate ${place !== null ? "font-semibold text-navy" : ""}`}>{place === null ? "All places" : placeLabel(place)}</span>
@@ -115,13 +104,14 @@ export function SiteDiaryPage() {
             </button>
           </div>
           <div className="-mt-1 flex min-h-6 items-center gap-2">
+            <Switch on={todayOnly} onChange={setTodayOnly} label="Today's jobs" />
             {hasFilters && (
               <button
                 className="h-7 px-1 text-[12px] text-muted"
                 onClick={() => {
                   setSearch("");
                   setPlace(null);
-                  setWho(null);
+                  setTodayOnly(false);
                 }}
               >
                 Clear filters
@@ -170,21 +160,6 @@ export function SiteDiaryPage() {
         )}
       </div>
 
-      <Pop anchor={whoBtn} open={whoOpen} onClose={() => setWhoOpen(false)} width={240}>
-        {[null, ...people].map((p) => (
-          <button
-            key={p ?? "all"}
-            className={`flex h-10 w-full items-center rounded px-2 text-left text-[14px] active:bg-soft ${who === p ? "font-semibold text-navy" : ""}`}
-            onClick={() => {
-              setWho(p);
-              setWhoOpen(false);
-            }}
-          >
-            {p ?? "Everyone"}
-          </button>
-        ))}
-        {!people.length && <p className="px-2 py-2 text-[12px] text-muted">Names you add with Search who show here.</p>}
-      </Pop>
       <Pop anchor={placeBtn} open={placeOpen} onClose={() => setPlaceOpen(false)} align="end" width={240}>
         {[null, WHOLE_HOUSE, OUTSIDE, ...places].map((p) => (
           <button

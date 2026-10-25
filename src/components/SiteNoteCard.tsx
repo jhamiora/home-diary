@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, ChevronDown, ChevronUp, Clock, Image, Package, Pencil, Share2, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Clock, Image, Package, Pencil, Share2, Sun, Trash2 } from "lucide-react";
 import { db, dayKey, deleteJob, type Job, type JobStatus } from "../lib/db";
 import { lineLabel } from "../lib/materials";
 import { placeLabel } from "../lib/places";
@@ -42,7 +42,7 @@ async function shareNote(job: Job) {
 export function SiteNoteCard({ job, expanded, onToggle }: { job: Job; expanded: boolean; onToggle: () => void }) {
   const openJob = useOpenJob();
   const toast = useToast();
-  const { setDone } = useJobActions();
+  const { setDone, setToday } = useJobActions();
   const [viewAt, setViewAt] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const done = job.status === "done";
@@ -67,11 +67,25 @@ export function SiteNoteCard({ job, expanded, onToggle }: { job: Job; expanded: 
       <div className="cursor-pointer px-3.5 pb-2 pt-3" onClick={onToggle}>
         <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
           {!done && <span className={`h-4 rounded-[3px] border px-1 text-[9px] font-semibold leading-[14px] ${pClass}`}>{pLabel}</span>}
-          {onToday && <span className="h-4 rounded-[3px] bg-navy px-1 text-[9px] font-semibold leading-4 text-white">TODAY</span>}
           {job.status === "in_progress" && (
             <span className="h-4 rounded-[3px] border border-[#b9d3e6] bg-tint px-1 text-[9px] font-semibold leading-[14px] text-navy">IN PROGRESS</span>
           )}
           <div className="flex-1" />
+          {!done && (
+            <button
+              aria-pressed={onToday}
+              onClick={(e) => {
+                e.stopPropagation();
+                setToday(job, !onToday);
+              }}
+              className={`-my-1 flex h-7 items-center gap-1 rounded border px-2 text-[11px] font-medium ${
+                onToday ? "border-navy bg-navy text-white" : "border-line text-muted"
+              }`}
+            >
+              <Sun size={12} fill={onToday ? "currentColor" : "none"} />
+              Today
+            </button>
+          )}
           {expanded ? <ChevronUp size={16} className="text-muted" /> : <ChevronDown size={16} className="text-muted" />}
         </div>
 
@@ -81,12 +95,6 @@ export function SiteNoteCard({ job, expanded, onToggle }: { job: Job; expanded: 
 
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[12px] text-muted">
           <span>{placeLabel(job.area)}</span>
-          {job.who?.length ? (
-            <>
-              <span>·</span>
-              <span className="max-w-[140px] truncate">{job.who.join(", ")}</span>
-            </>
-          ) : null}
           <span>·</span>
           <span className="flex items-center gap-0.5">
             <Clock size={12} />
@@ -109,12 +117,21 @@ export function SiteNoteCard({ job, expanded, onToggle }: { job: Job; expanded: 
           </div>
         )}
 
-        {!expanded && job.materials.length > 0 && (
-          <div className="mt-1.5 flex items-center gap-1 text-[12px] text-muted">
-            <Package size={12} className="shrink-0" />
-            <span className="truncate">
-              {toGet.length ? `To get: ${toGet.map(lineLabel).join(", ")}` : "Materials in hand"}
-            </span>
+        {job.materials.length > 0 && (
+          <div className="mt-2 rounded border border-line bg-soft/60 px-2.5 py-1.5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted">
+              <Package size={11} />
+              Materials
+              <span className="ml-auto font-normal normal-case tracking-normal">{toGet.length ? `${toGet.length} to get` : "All in hand"}</span>
+            </div>
+            {job.materials.map((m) => (
+              <button key={m.id} className="flex w-full items-center gap-2.5 py-1.5 text-left" onClick={() => toggleMaterial(m.id)}>
+                <span role="checkbox" aria-checked={m.have} aria-label={m.have ? "Got it" : "Need it"} className="check h-5 w-5">
+                  {m.have && <Check size={12} strokeWidth={3} />}
+                </span>
+                <span className={`text-[14px] ${m.have ? "text-muted line-through" : ""}`}>{lineLabel(m)}</span>
+              </button>
+            ))}
           </div>
         )}
 
@@ -138,19 +155,6 @@ export function SiteNoteCard({ job, expanded, onToggle }: { job: Job; expanded: 
             <div className="mb-3 mt-1 flex flex-wrap gap-2">
               {job.photoIds.map((id, i) => (
                 <PhotoThumb key={id} id={id} onClick={() => setViewAt(i)} className="h-20 w-20 border border-line" />
-              ))}
-            </div>
-          )}
-          {job.materials.length > 0 && (
-            <div className="mb-3">
-              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted">Materials</div>
-              {job.materials.map((m) => (
-                <button key={m.id} className="flex w-full items-center gap-2.5 py-1.5 text-left" onClick={() => toggleMaterial(m.id)}>
-                  <span role="checkbox" aria-checked={m.have} className="check h-5 w-5">
-                    {m.have && <Check size={12} strokeWidth={3} />}
-                  </span>
-                  <span className={`text-[14px] ${m.have ? "text-muted line-through" : ""}`}>{lineLabel(m)}</span>
-                </button>
               ))}
             </div>
           )}

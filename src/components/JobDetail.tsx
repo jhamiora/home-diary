@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { Check, Plus, Sun, Trash2 } from "lucide-react";
-import { PRIORITIES, db, dayKey, deleteJob, deletePhotos, uid, type Job, type Material, type Note } from "../lib/db";
+import { PRIORITIES, db, dayKey, deleteJob, deletePhotos, uid, type Job, type Material } from "../lib/db";
 import { ConfirmSheet, Screen, SectionLabel, Sheet, useToast } from "../lib/ui";
 import { lineLabel } from "../lib/materials";
 import { OUTSIDE, WHOLE_HOUSE, placeLabel, usePlaces } from "../lib/places";
 import { AddPhotoButtons, PhotoGrid } from "./Photos";
-import { NoteCard, NoteComposer } from "./Notes";
 import { useJobActions } from "./JobRow";
 
 export function AreaPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -108,12 +107,11 @@ function MaterialForm({ initial, onSave, onDelete }: { initial?: Material; onSav
 
 export function JobDetail({ jobId, onClose }: { jobId: string; onClose: () => void }) {
   const job = useLiveQuery(() => db.jobs.get(jobId).then((j) => j ?? null), [jobId]);
-  const notes = useLiveQuery(() => db.notes.where("jobId").equals(jobId).reverse().sortBy("createdAt"), [jobId]);
   if (!job) return null;
-  return <JobDetailInner job={job} notes={notes ?? []} onClose={onClose} />;
+  return <JobDetailInner job={job} onClose={onClose} />;
 }
 
-function JobDetailInner({ job, notes, onClose }: { job: Job; notes: Note[]; onClose: () => void }) {
+function JobDetailInner({ job, onClose }: { job: Job; onClose: () => void }) {
   const toast = useToast();
   const { setDone, setToday } = useJobActions();
   // Typed fields use explicit Save; taps (priority, ticks, photos) save instantly.
@@ -123,7 +121,6 @@ function JobDetailInner({ job, notes, onClose }: { job: Job; notes: Note[]; onCl
   const [addingMaterial, setAddingMaterial] = useState(false);
   const [editMaterial, setEditMaterial] = useState<Material | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [noteOpen, setNoteOpen] = useState(false);
 
   const dirty = title !== job.title || area !== job.area || notesText !== job.notes;
   const onToday = job.todayDate === dayKey();
@@ -205,7 +202,6 @@ function JobDetailInner({ job, notes, onClose }: { job: Job; notes: Note[]; onCl
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
-        {job.who?.length ? <p className="-mt-1 text-[13px] text-muted">Who: {job.who.join(", ")}</p> : null}
         <PrioritySeg value={job.priority} onChange={(p) => patch({ priority: p })} />
         <AreaPicker value={area} onChange={setArea} />
         <textarea
@@ -246,23 +242,6 @@ function JobDetailInner({ job, notes, onClose }: { job: Job; notes: Note[]; onCl
         </button>
       </div>
 
-      <SectionLabel
-        right={
-          <button className="text-[13px] font-medium text-navy" onClick={() => setNoteOpen(true)}>
-            Add note
-          </button>
-        }
-      >
-        Diary
-      </SectionLabel>
-      <div className="border-t border-line">
-        {notes.length ? (
-          notes.map((n) => <NoteCard key={n.id} note={n} showJob={false} />)
-        ) : (
-          <p className="px-4 py-3 text-[14px] text-muted">Notes you add for this job show here and in the diary.</p>
-        )}
-      </div>
-
       <div className="px-4 py-8">
         <button className="flex items-center gap-2 text-[14px] text-high" onClick={() => setConfirmDelete(true)}>
           <Trash2 size={16} strokeWidth={1.75} />
@@ -293,16 +272,11 @@ function JobDetailInner({ job, notes, onClose }: { job: Job; notes: Note[]; onCl
           />
         )}
       </Sheet>
-      <Sheet open={noteOpen} onClose={() => setNoteOpen(false)} title={`Note for ${job.title}`}>
-        <div className="px-4">
-          <NoteComposer jobId={job.id} onSaved={() => setNoteOpen(false)} />
-        </div>
-      </Sheet>
       <ConfirmSheet
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
         title="Delete this job?"
-        body="Its photos and materials go too. Diary notes stay in the diary."
+        body="Its photos and materials go too."
         confirmLabel="Delete job"
         danger
         onConfirm={async () => {

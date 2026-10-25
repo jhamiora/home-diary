@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Check, ListChecks, Share2 } from "lucide-react";
+import { Check, ChevronRight, ListChecks, Package } from "lucide-react";
 import { PRIORITIES, byPriority, db, dayKey, isOpen, type Job } from "../lib/db";
-import { buildShoppingList, lineLabel, setLineHave, shoppingText, type ShopLine } from "../lib/materials";
-import { Empty, SectionLabel, Sheet, useStoredState, useToast } from "../lib/ui";
+import { buildShoppingList, lineLabel } from "../lib/materials";
+import { useGoTab } from "../lib/nav";
+import { Empty, SectionLabel, Sheet, useStoredState } from "../lib/ui";
 import { JobRow, PRIORITY_BAR, useJobActions } from "../components/JobRow";
 
 function PlanSheet({ open, onClose, jobs }: { open: boolean; onClose: () => void; jobs: Job[] }) {
@@ -53,26 +54,11 @@ function PlanSheet({ open, onClose, jobs }: { open: boolean; onClose: () => void
   );
 }
 
-function ShopRow({ line }: { line: ShopLine }) {
-  const jobs = [...new Set(line.refs.map((r) => r.jobTitle))];
-  return (
-    <button className="flex w-full items-center gap-3 border-b border-line py-3 pl-4 pr-3 text-left active:bg-soft" onClick={() => setLineHave(line, !line.have)}>
-      <span role="checkbox" aria-checked={line.have} className="check">
-        {line.have && <Check size={14} strokeWidth={3} />}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className={`block text-[15px] ${line.have ? "text-muted line-through" : "font-medium"}`}>{lineLabel(line)}</span>
-        <span className="block truncate text-[13px] text-muted">{jobs.join(", ")}</span>
-      </span>
-    </button>
-  );
-}
-
 export function TodayPage() {
   const jobs = useLiveQuery(() => db.jobs.toArray(), []);
   const [planning, setPlanning] = useState(false);
-  const [scope, setScope] = useStoredState<"today" | "all">("shop:scope", "today");
-  const toast = useToast();
+  const [, setTodayOnly] = useStoredState("materials:todayOnly", false);
+  const goTab = useGoTab();
   const { setToday } = useJobActions();
   const today = dayKey();
 
@@ -81,22 +67,8 @@ export function TodayPage() {
   const doneToday = all.filter((j) => j.status === "done" && j.doneAt && dayKey(new Date(j.doneAt)) === today);
   const leftOver = all.filter((j) => isOpen(j) && j.todayDate && j.todayDate < today);
 
-  const shopJobs = scope === "today" ? todays : all.filter(isOpen);
-  const lines = buildShoppingList(shopJobs);
+  const lines = buildShoppingList(todays);
   const need = lines.filter((l) => !l.have);
-
-  const share = async () => {
-    const text = shoppingText(need);
-    try {
-      if (navigator.share) await navigator.share({ text });
-      else {
-        await navigator.clipboard.writeText(text);
-        toast("List copied");
-      }
-    } catch {
-      /* cancelled */
-    }
-  };
 
   const dateLine = new Date().toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long" });
 
@@ -138,38 +110,23 @@ export function TodayPage() {
         <Empty title="Nothing picked for today" body="Tap Pick jobs, or the sun on any job, to plan your day. Your materials list builds itself." />
       )}
 
-      <SectionLabel
-        right={
-          need.length > 0 && (
-            <button className="flex items-center gap-1.5 text-[13px] font-medium text-navy" onClick={share}>
-              <Share2 size={15} strokeWidth={1.75} />
-              Send list
-            </button>
-          )
-        }
+      <SectionLabel>Materials</SectionLabel>
+      <button
+        className="mx-4 flex w-[calc(100%-2rem)] items-center gap-3 rounded border border-line px-3 py-3 text-left active:bg-soft"
+        onClick={() => {
+          setTodayOnly(true);
+          goTab("materials");
+        }}
       >
-        Materials to get
-      </SectionLabel>
-      <div className="px-4 pb-3">
-        <div className="seg">
-          <button aria-pressed={scope === "today"} onClick={() => setScope("today")}>
-            Today's jobs
-          </button>
-          <button aria-pressed={scope === "all"} onClick={() => setScope("all")}>
-            All open jobs
-          </button>
-        </div>
-      </div>
-      <div className="border-t border-line">
-        {lines.map((l) => (
-          <ShopRow key={l.key} line={l} />
-        ))}
-        {!need.length && (
-          <p className="px-4 py-3 text-[14px] text-muted">
-            {lines.length ? `Got all ${lines.length}. Good to go.` : "No materials on these jobs yet. Add them inside each job."}
-          </p>
-        )}
-      </div>
+        <Package size={18} strokeWidth={1.75} className="shrink-0 text-navy" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-medium">
+            {need.length ? `${need.length} to get for today's jobs` : lines.length ? "Got everything for today" : "No materials on today's jobs"}
+          </span>
+          <span className="block truncate text-[13px] text-muted">{need.length ? need.map(lineLabel).join(", ") : "Open the Materials tab"}</span>
+        </span>
+        <ChevronRight size={18} className="shrink-0 text-muted" />
+      </button>
 
       {doneToday.length > 0 && (
         <>

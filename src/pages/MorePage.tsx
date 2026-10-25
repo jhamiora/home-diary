@@ -11,7 +11,6 @@ export function MorePage() {
   const toast = useToast();
   const counts = useLiveQuery(async () => ({
     jobs: await db.jobs.count(),
-    notes: await db.notes.count(),
     photos: await db.photos.count(),
   }), []);
   const [usage, setUsage] = useState<{ used: number; persisted: boolean } | null>(null);
@@ -53,7 +52,7 @@ export function MorePage() {
     setBusy("Restoring");
     try {
       const r = await importBackup(pending, mode);
-      toast(`Restored ${r.jobs} jobs, ${r.notes} notes, ${r.photos} photos`);
+      toast(`Restored ${r.jobs} notes and ${r.photos} photos`);
     } catch (e) {
       toast((e as Error).message || "Couldn't read that file");
     } finally {
@@ -70,8 +69,7 @@ export function MorePage() {
 
       <SectionLabel>On this phone</SectionLabel>
       <div className="mx-4 divide-y divide-line rounded border border-line">
-        <Row label="Jobs" value={counts?.jobs ?? 0} />
-        <Row label="Diary notes" value={counts?.notes ?? 0} />
+        <Row label="Site notes" value={counts?.jobs ?? 0} />
         <Row label="Photos" value={counts?.photos ?? 0} />
         {usage && <Row label="Space used" value={mb(usage.used)} />}
         {usage && <Row label="Protected from clean-up" value={usage.persisted ? "Yes" : "Not yet"} />}
@@ -118,7 +116,7 @@ export function MorePage() {
         <div className="space-y-2 px-4 pt-5">
           <div className="text-[17px] font-semibold">Restore this backup?</div>
           <p className="pb-3 text-[14px] leading-relaxed text-muted">
-            Add to what's here keeps your current jobs and notes. Replace everything is for a fresh phone.
+            Add to what's here keeps your current notes. Replace everything is for a fresh phone.
           </p>
           <button className="btn btn-primary w-full" onClick={() => restore("merge")}>
             Add to what's here
