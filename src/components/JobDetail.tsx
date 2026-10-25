@@ -1,41 +1,41 @@
 import { useEffect, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { Check, Plus, Sun, Trash2 } from "lucide-react";
-import { PRIORITIES, db, dayKey, deleteJob, deletePhotos, uid, type Job, type Material, type Note } from "../lib/db";
+import { PRIORITIES, db, dayKey, deleteJob, deletePhotos, uid, type Job, type Material } from "../lib/db";
 import { ConfirmSheet, Screen, SectionLabel, Sheet, useToast } from "../lib/ui";
 import { lineLabel } from "../lib/materials";
+import { OUTSIDE, WHOLE_HOUSE, placeLabel, usePlaces } from "../lib/places";
 import { AddPhotoButtons, PhotoGrid } from "./Photos";
-import { NoteCard, NoteComposer } from "./Notes";
 import { useJobActions } from "./JobRow";
 
-export function useAreas() {
-  return (
-    useLiveQuery(async () => {
-      const jobs = await db.jobs.toArray();
-      return [...new Set(jobs.map((j) => j.area.trim()).filter(Boolean))].sort();
-    }, []) ?? []
-  );
-}
-
 export function AreaPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const areas = useAreas();
+  const { places, addPlace } = usePlaces();
+  const [adding, setAdding] = useState("");
   return (
     <div>
-      <input
-        className="field"
-        placeholder="Where? e.g. Kitchen, Deck, Garage"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      {areas.length > 0 && (
-        <div className="no-scrollbar -mx-4 mt-2 flex gap-1.5 overflow-x-auto px-4">
-          {areas.map((a) => (
-            <button key={a} type="button" className="tab" aria-pressed={value.trim() === a} onClick={() => onChange(value.trim() === a ? "" : a)}>
-              {a}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="flex flex-wrap gap-1.5">
+        {[WHOLE_HOUSE, OUTSIDE, ...places].map((p) => (
+          <button key={p || "whole"} type="button" className="tab" aria-pressed={value === p} onClick={() => onChange(p)}>
+            {placeLabel(p)}
+          </button>
+        ))}
+      </div>
+      <form
+        className="mt-2 flex gap-1.5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const n = addPlace(adding);
+          if (n) {
+            onChange(n);
+            setAdding("");
+          }
+        }}
+      >
+        <input className="field h-9 py-0 text-[15px]" placeholder="Add location" value={adding} onChange={(e) => setAdding(e.target.value)} />
+        <button className="btn h-9 shrink-0 px-3 text-[14px]" disabled={!adding.trim()}>
+          Add
+        </button>
+      </form>
     </div>
   );
 }
@@ -107,12 +107,11 @@ function MaterialForm({ initial, onSave, onDelete }: { initial?: Material; onSav
 
 export function JobDetail({ jobId, onClose }: { jobId: string; onClose: () => void }) {
   const job = useLiveQuery(() => db.jobs.get(jobId).then((j) => j ?? null), [jobId]);
-  const notes = useLiveQuery(() => db.notes.where("jobId").equals(jobId).reverse().sortBy("createdAt"), [jobId]);
   if (!job) return null;
-  return <JobDetailInner job={job} notes={notes ?? []} onClose={onClose} />;
+  return <JobDetailInner job={job} onClose={onClose} />;
 }
 
-function JobDetailInner({ job, notes, onClose }: { job: Job; notes: Note[]; onClose: () => void }) {
+function JobDetailInner({ job, onClose }: { job: Job; onClose: () => void }) {
   const toast = useToast();
   const { setDone, setToday } = useJobActions();
   // Typed fields use explicit Save; taps (priority, ticks, photos) save instantly.
@@ -122,7 +121,6 @@ function JobDetailInner({ job, notes, onClose }: { job: Job; notes: Note[]; onCl
   const [addingMaterial, setAddingMaterial] = useState(false);
   const [editMaterial, setEditMaterial] = useState<Material | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [noteOpen, setNoteOpen] = useState(false);
 
   const dirty = title !== job.title || area !== job.area || notesText !== job.notes;
   const onToday = job.todayDate === dayKey();
@@ -191,9 +189,16 @@ function JobDetailInner({ job, notes, onClose }: { job: Job; notes: Note[]; onCl
       }
     >
       <div className="space-y-3 px-4 pt-4">
-        <input
-          className="w-full bg-transparent text-[22px] font-semibold leading-tight outline-none placeholder:text-[#a3abb2]"
-          placeholder="Job name"
+        <textarea
+          rows={1}
+          ref={(el) => {
+            if (el) {
+              el.style.height = "auto";
+              if (el.scrollHeight) el.style.height = `${el.scrollHeight}px`;
+            }
+          }}
+          className="w-full resize-none bg-transparent text-[20px] font-semibold leading-snug outline-none placeholder:text-[#a3abb2]"
+          placeholder="What needs doing?"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
@@ -237,23 +242,6 @@ function JobDetailInner({ job, notes, onClose }: { job: Job; notes: Note[]; onCl
         </button>
       </div>
 
-      <SectionLabel
-        right={
-          <button className="text-[13px] font-medium text-navy" onClick={() => setNoteOpen(true)}>
-            Add note
-          </button>
-        }
-      >
-        Diary
-      </SectionLabel>
-      <div className="border-t border-line">
-        {notes.length ? (
-          notes.map((n) => <NoteCard key={n.id} note={n} showJob={false} />)
-        ) : (
-          <p className="px-4 py-3 text-[14px] text-muted">Notes you add for this job show here and in the diary.</p>
-        )}
-      </div>
-
       <div className="px-4 py-8">
         <button className="flex items-center gap-2 text-[14px] text-high" onClick={() => setConfirmDelete(true)}>
           <Trash2 size={16} strokeWidth={1.75} />
@@ -284,16 +272,11 @@ function JobDetailInner({ job, notes, onClose }: { job: Job; notes: Note[]; onCl
           />
         )}
       </Sheet>
-      <Sheet open={noteOpen} onClose={() => setNoteOpen(false)} title={`Note for ${job.title}`}>
-        <div className="px-4">
-          <NoteComposer jobId={job.id} onSaved={() => setNoteOpen(false)} />
-        </div>
-      </Sheet>
       <ConfirmSheet
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
         title="Delete this job?"
-        body="Its photos and materials go too. Diary notes stay in the diary."
+        body="Its photos and materials go too."
         confirmLabel="Delete job"
         danger
         onConfirm={async () => {

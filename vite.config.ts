@@ -12,8 +12,8 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["icon.svg", "apple-touch-icon.png"],
       manifest: {
-        name: "Home Diary",
-        short_name: "Home Diary",
+        name: "Home Task",
+        short_name: "Home Task",
         description: "Jobs, materials and a photo diary for around the house. Everything stays on your phone.",
         theme_color: "#062932",
         background_color: "#ffffff",
@@ -29,6 +29,14 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+        // Fonts keep working with no signal once seen.
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/,
+            handler: "CacheFirst",
+            options: { cacheName: "fonts", expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 } },
+          },
+        ],
       },
     }),
   ],

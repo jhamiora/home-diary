@@ -1,35 +1,37 @@
 import { useState } from "react";
-import { BookOpen, ListTodo, Menu, Sun, type LucideIcon } from "lucide-react";
+import { ClipboardList, ListChecks, Menu, Package, type LucideIcon } from "lucide-react";
 import { ToastProvider, useStoredState } from "./lib/ui";
 import { OpenJobCtx } from "./components/JobRow";
 import { JobDetail } from "./components/JobDetail";
-import { TodayPage } from "./pages/TodayPage";
-import { JobsPage } from "./pages/JobsPage";
-import { DiaryPage } from "./pages/DiaryPage";
+import { TasksPage } from "./pages/TasksPage";
+import { SiteDiaryPage } from "./pages/SiteDiaryPage";
+import { MaterialsPage } from "./pages/MaterialsPage";
+import { GoTabCtx, type Tab } from "./lib/nav";
 import { MorePage } from "./pages/MorePage";
 
-type Tab = "today" | "jobs" | "diary" | "more";
 
 const TABS: { id: Tab; label: string; Icon: LucideIcon }[] = [
-  { id: "today", label: "Today", Icon: Sun },
-  { id: "jobs", label: "Jobs", Icon: ListTodo },
-  { id: "diary", label: "Diary", Icon: BookOpen },
+  { id: "tasks", label: "Tasks", Icon: ListChecks },
+  { id: "site", label: "Task Builder", Icon: ClipboardList },
+  { id: "materials", label: "Materials", Icon: Package },
   { id: "more", label: "More", Icon: Menu },
 ];
 
 const PAGES: Record<Tab, () => React.JSX.Element> = {
-  today: TodayPage,
-  jobs: JobsPage,
-  diary: DiaryPage,
+  tasks: TasksPage,
+  site: SiteDiaryPage,
+  materials: MaterialsPage,
   more: MorePage,
 };
 
 export default function App() {
-  const [tab, setTab] = useStoredState<Tab>("tab", "today");
+  const [stored, setTab] = useStoredState<string>("tab", "site");
+  const tab: Tab = (["tasks", "site", "materials", "more"] as string[]).includes(stored) ? (stored as Tab) : "site";
   const [jobId, setJobId] = useState<string | null>(null);
 
   return (
     <ToastProvider>
+      <GoTabCtx.Provider value={setTab}>
       <OpenJobCtx.Provider value={setJobId}>
         <div className="mx-auto flex h-full max-w-xl flex-col">
           {/* Every tab stays mounted so each keeps its own scroll spot. */}
@@ -59,6 +61,7 @@ export default function App() {
         </div>
         {jobId && <JobDetail key={jobId} jobId={jobId} onClose={() => setJobId(null)} />}
       </OpenJobCtx.Provider>
+      </GoTabCtx.Provider>
     </ToastProvider>
   );
 }

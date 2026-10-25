@@ -1,18 +1,34 @@
-import { useEffect, useRef, useState } from "react";
-import { ArrowUpRight, Pencil, Square, Type, Undo2 } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ArrowUpRight, Check, GripVertical, Minus, Pencil, Square, Type, Undo2 } from "lucide-react";
 import { db, type Shape } from "../lib/db";
 import { canvasToBlob, loadImage, makeThumb } from "../lib/photos";
 import { useBackClose, useToast } from "../lib/ui";
 
-const COLORS = ["#e11d1d", "#facc15", "#ffffff", "#111111"];
-type Tool = "pen" | "arrow" | "box" | "text";
+// Fluoro green reads on timber, concrete and dark photos alike.
+const COLORS = ["#e11d1d", "#39ff14", "#facc15", "#ff7a00", "#1e90ff", "#ffffff", "#111111"];
+type Tool = "pen" | "line" | "arrow" | "box" | "text";
+type TextShape = Extract<Shape, { kind: "text" }>;
 
 const TOOLS: { tool: Tool; label: string; Icon: typeof Pencil }[] = [
   { tool: "pen", label: "Draw", Icon: Pencil },
+  { tool: "line", label: "Line", Icon: Minus },
   { tool: "arrow", label: "Arrow", Icon: ArrowUpRight },
   { tool: "box", label: "Box", Icon: Square },
   { tool: "text", label: "Text", Icon: Type },
 ];
+
+const LINE_HEIGHT = 1.2;
+const textFont = (size: number) => `600 ${size}px Inter, system-ui, sans-serif`;
+const outlineFor = (color: string) => (color === "#111111" ? "#ffffff" : "rgba(0,0,0,0.55)");
+
+let measureCtx: CanvasRenderingContext2D | null = null;
+function textBox(s: Pick<TextShape, "text" | "size">) {
+  measureCtx ??= document.createElement("canvas").getContext("2d");
+  measureCtx!.font = textFont(s.size);
+  const lines = s.text.split("\n");
+  const w = Math.max(...lines.map((l) => measureCtx!.measureText(l || " ").width));
+  return { w, h: lines.length * s.size * LINE_HEIGHT };
+}
 
 export function drawShapes(ctx: CanvasRenderingContext2D, shapes: Shape[]) {
   ctx.lineCap = "round";
@@ -29,49 +45,154 @@ export function drawShapes(ctx: CanvasRenderingContext2D, shapes: Shape[]) {
       }
       if (s.points.length === 2) ctx.lineTo(s.points[0] + 0.1, s.points[1]);
       ctx.stroke();
-    } else if (s.kind === "box") {
+    } else if (s.kind === "line") {
       ctx.lineWidth = s.width;
-      ctx.strokeRect(Math.min(s.x1, s.x2), Math.min(s.y1, s.y2), Math.abs(s.x2 - s.x1), Math.abs(s.y2 - s.y1));
-    } else if (s.kind === "arrow") {
-      ctx.lineWidth = s.width;
-      const angle = Math.atan2(s.y2 - s.y1, s.x2 - s.x1);
-      const head = s.width * 4;
       ctx.beginPath();
       ctx.moveTo(s.x1, s.y1);
       ctx.lineTo(s.x2, s.y2);
       ctx.stroke();
+    } else if (s.kind === "box") {
+      ctx.lineWidth = s.width;
+      ctx.strokeRect(Math.min(s.x1, s.x2), Math.min(s.y1, s.y2), Math.abs(s.x2 - s.x1), Math.abs(s.y2 - s.y1));
+    } else if (s.kind === "arrow") {
+      // The shaft stops inside the head so its round end never blunts the point.
+      ctx.lineWidth = s.width;
+      const angle = Math.atan2(s.y2 - s.y1, s.x2 - s.x1);
+      const len = Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
+      const head = Math.min(s.width * 5.5, len * 0.6);
+      const spread = Math.PI / 9;
+      const stop = head * 0.7;
+      ctx.beginPath();
+      ctx.moveTo(s.x1, s.y1);
+      ctx.lineTo(s.x2 - stop * Math.cos(angle), s.y2 - stop * Math.sin(angle));
+      ctx.stroke();
       ctx.beginPath();
       ctx.moveTo(s.x2, s.y2);
-      ctx.lineTo(s.x2 - head * Math.cos(angle - Math.PI / 7), s.y2 - head * Math.sin(angle - Math.PI / 7));
-      ctx.lineTo(s.x2 - head * Math.cos(angle + Math.PI / 7), s.y2 - head * Math.sin(angle + Math.PI / 7));
+      ctx.lineTo(s.x2 - head * Math.cos(angle - spread), s.y2 - head * Math.sin(angle - spread));
+      ctx.lineTo(s.x2 - head * 0.82 * Math.cos(angle), s.y2 - head * 0.82 * Math.sin(angle));
+      ctx.lineTo(s.x2 - head * Math.cos(angle + spread), s.y2 - head * Math.sin(angle + spread));
       ctx.closePath();
       ctx.fill();
     } else if (s.kind === "text") {
-      ctx.font = `600 ${s.size}px Inter, system-ui, sans-serif`;
-      ctx.textBaseline = "middle";
-      // Dark or light outline so text reads on any photo.
+      // x, y is the top left of the first line; each new line sits below.
+      ctx.font = textFont(s.size);
+      ctx.textBaseline = "top";
       ctx.lineWidth = s.size / 6;
-      ctx.strokeStyle = s.color === "#111111" ? "#ffffff" : "rgba(0,0,0,0.55)";
-      ctx.strokeText(s.text, s.x, s.y);
-      ctx.fillText(s.text, s.x, s.y);
+      ctx.strokeStyle = outlineFor(s.color);
+      s.text.split("\n").forEach((line, i) => {
+        const y = s.y + i * s.size * LINE_HEIGHT;
+        ctx.strokeText(line, s.x, y);
+        ctx.fillText(line, s.x, y);
+      });
     }
   }
+}
+
+interface Editing {
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+  size: number;
 }
 
 export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: () => void }) {
   useBackClose(true, onClose);
   const toast = useToast();
+  const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const typeRef = useRef<HTMLTextAreaElement>(null);
   const baseRef = useRef<HTMLImageElement | null>(null);
   const baseBlobRef = useRef<Blob | null>(null);
   const draftRef = useRef<Shape | null>(null);
+  const dragRef = useRef<{ index: number; sx: number; sy: number; ox: number; oy: number; moved: boolean } | null>(null);
+  const gripRef = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
+  const cornerRef = useRef<{ ax: number; ay: number; d0: number; size0: number } | null>(null);
   const [shapes, setShapes] = useState<Shape[]>([]);
   const [tool, setTool] = useState<Tool>("arrow");
   const [color, setColor] = useState(COLORS[0]);
+  // Last text size used, so the next label starts the same size.
+  const [lastSize, setLastSize] = useState<number | null>(null);
   const [ready, setReady] = useState(false);
-  const [textAt, setTextAt] = useState<{ x: number; y: number } | null>(null);
-  const [textValue, setTextValue] = useState("");
+  const [editing, setEditing] = useState<Editing | null>(null);
   const [saving, setSaving] = useState(false);
+  // Screen size of the photo, and the part of the screen the keyboard leaves free.
+  const [fit, setFit] = useState({ w: 0, h: 0, scale: 1 });
+  const [view, setView] = useState({ h: window.innerHeight, top: 0 });
+  // Two-finger pinch zooms and moves the photo, never the whole screen.
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const zoomRef = useRef({ zoom: 1, pan: { x: 0, y: 0 } });
+  zoomRef.current = { zoom, pan };
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinchRef = useRef<{ d0: number; z0: number; v: { x: number; y: number } } | null>(null);
+  const pinchingRef = useRef(false);
+
+  const stageCentre = () => {
+    const r = stageRef.current!.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  };
+
+  // Zoom about a screen point, keeping that point under the fingers.
+  const zoomAbout = (mx: number, my: number, z: number, v: { x: number; y: number }) => {
+    const nz = Math.min(6, Math.max(1, z));
+    if (nz <= 1.001) {
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+      return;
+    }
+    const c = stageCentre();
+    setZoom(nz);
+    setPan({ x: mx - c.x - nz * v.x, y: my - c.y - nz * v.y });
+  };
+
+  const localAt = (mx: number, my: number) => {
+    const c = stageCentre();
+    const { zoom: z, pan: p } = zoomRef.current;
+    return { x: (mx - c.x - p.x) / z, y: (my - c.y - p.y) / z };
+  };
+
+  const onStageDown = (e: React.PointerEvent) => {
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      const mx = (a.x + b.x) / 2;
+      const my = (a.y + b.y) / 2;
+      pinchRef.current = { d0: Math.max(10, Math.hypot(a.x - b.x, a.y - b.y)), z0: zoomRef.current.zoom, v: localAt(mx, my) };
+      pinchingRef.current = true;
+      // The first finger's line was the start of a pinch, not a mark.
+      draftRef.current = null;
+      dragRef.current = null;
+      redraw();
+    }
+  };
+  const onStageMove = (e: React.PointerEvent) => {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const p = pinchRef.current;
+    if (!p || pointers.current.size < 2) return;
+    const [a, b] = [...pointers.current.values()];
+    zoomAbout((a.x + b.x) / 2, (a.y + b.y) / 2, (p.z0 * Math.hypot(a.x - b.x, a.y - b.y)) / p.d0, p.v);
+  };
+  const onStageUp = (e: React.PointerEvent) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinchRef.current = null;
+    if (pointers.current.size === 0) setTimeout(() => (pinchingRef.current = false), 0);
+  };
+
+  // Trackpad pinch (ctrl + wheel) and two-finger scroll on a computer.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const { zoom: z, pan: p } = zoomRef.current;
+      if (e.ctrlKey) zoomAbout(e.clientX, e.clientY, z * Math.exp(-e.deltaY * 0.01), localAt(e.clientX, e.clientY));
+      else if (z > 1) setPan({ x: p.x - e.deltaX, y: p.y - e.deltaY });
+    };
+    stage.addEventListener("wheel", onWheel, { passive: false });
+    return () => stage.removeEventListener("wheel", onWheel);
+  }, [ready]);
 
   useEffect(() => {
     let alive = true;
@@ -89,6 +210,35 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
       alive = false;
     };
   }, [photoId]);
+
+  // Keep the photo above the phone keyboard while typing.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    const update = () => setView({ h: vv ? vv.height : window.innerHeight, top: vv ? vv.offsetTop : 0 });
+    update();
+    vv?.addEventListener("resize", update);
+    vv?.addEventListener("scroll", update);
+    window.addEventListener("resize", update);
+    return () => {
+      vv?.removeEventListener("resize", update);
+      vv?.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    const stage = stageRef.current;
+    const img = baseRef.current;
+    if (!stage || !img) return;
+    const measure = () => {
+      const scale = Math.min(stage.clientWidth / img.naturalWidth, stage.clientHeight / img.naturalHeight);
+      setFit({ w: Math.floor(img.naturalWidth * scale), h: Math.floor(img.naturalHeight * scale), scale });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(stage);
+    return () => ro.disconnect();
+  }, [ready]);
 
   const redraw = () => {
     const c = canvasRef.current;
@@ -116,14 +266,49 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
     return { x: ((e.clientX - r.left) / r.width) * c.width, y: ((e.clientY - r.top) / r.height) * c.height };
   };
 
+  const hitText = (x: number, y: number) => {
+    const pad = scaleUnit() / 80;
+    for (let i = shapes.length - 1; i >= 0; i--) {
+      const s = shapes[i];
+      if (s.kind !== "text") continue;
+      const b = textBox(s);
+      if (x >= s.x - pad && x <= s.x + b.w + pad && y >= s.y - pad && y <= s.y + b.h + pad) return i;
+    }
+    return -1;
+  };
+
+  const commitText = () => {
+    if (!editing) return;
+    const text = editing.text.replace(/\s+$/, "");
+    if (text.trim()) setShapes((s) => [...s, { kind: "text", color: editing.color, size: editing.size, x: editing.x, y: editing.y, text }]);
+    setEditing(null);
+    typeRef.current?.blur();
+  };
+
+  // Focus inside the tap itself so the phone keyboard opens.
+  const startTyping = (next: Editing) => {
+    setEditing(next);
+    const el = typeRef.current;
+    if (el) {
+      el.value = next.text;
+      el.focus({ preventScroll: true });
+    }
+  };
+
   const onDown = (e: React.PointerEvent) => {
-    if (!ready || textAt) return;
+    if (!ready || pinchingRef.current) return;
     const { x, y } = toImage(e);
     if (tool === "text") {
-      setTextAt({ x, y });
-      setTextValue("");
+      e.preventDefault();
+      const hit = hitText(x, y);
+      if (hit !== -1) {
+        const s = shapes[hit] as TextShape;
+        (e.target as Element).setPointerCapture(e.pointerId);
+        dragRef.current = { index: hit, sx: e.clientX, sy: e.clientY, ox: s.x, oy: s.y, moved: false };
+      }
       return;
     }
+    if (editing) commitText();
     (e.target as Element).setPointerCapture(e.pointerId);
     const width = Math.max(4, scaleUnit() / 180);
     draftRef.current =
@@ -132,32 +317,72 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
   };
 
   const onMove = (e: React.PointerEvent) => {
+    if (pinchingRef.current) return;
+    const drag = dragRef.current;
+    if (drag) {
+      const dx = e.clientX - drag.sx;
+      const dy = e.clientY - drag.sy;
+      if (!drag.moved && Math.hypot(dx, dy) < 6) return;
+      drag.moved = true;
+      setShapes((all) =>
+        all.map((s, i) => (i === drag.index && s.kind === "text" ? { ...s, x: drag.ox + dx / (fit.scale * zoom), y: drag.oy + dy / (fit.scale * zoom) } : s)),
+      );
+      return;
+    }
     const d = draftRef.current;
     if (!d) return;
     const { x, y } = toImage(e);
     if (d.kind === "pen") d.points.push(x, y);
-    else if (d.kind === "arrow" || d.kind === "box") {
+    else if (d.kind === "line" || d.kind === "arrow" || d.kind === "box") {
       d.x2 = x;
       d.y2 = y;
     }
     redraw();
   };
 
-  const onUp = () => {
+  const onUp = (e: React.PointerEvent) => {
+    if (pinchingRef.current) return;
+    if (tool === "text" && ready) {
+      const drag = dragRef.current;
+      dragRef.current = null;
+      if (drag?.moved) return;
+      if (editing) {
+        commitText();
+        return;
+      }
+      if (drag) {
+        // Tap on existing text: lift it back into the typing box.
+        const s = shapes[drag.index] as TextShape;
+        setShapes((all) => all.filter((_, i) => i !== drag.index));
+        setColor(s.color);
+        startTyping({ x: s.x, y: s.y, text: s.text, color: s.color, size: s.size });
+        return;
+      }
+      const { x, y } = toImage(e);
+      const size = lastSize ?? scaleUnit() / 22;
+      startTyping({ x, y: y - (size * LINE_HEIGHT) / 2, text: "", color, size });
+      return;
+    }
     const d = draftRef.current;
     draftRef.current = null;
     if (!d) return;
     const tooSmall =
-      (d.kind === "arrow" || d.kind === "box") && Math.hypot(d.x2 - d.x1, d.y2 - d.y1) < scaleUnit() / 60;
+      (d.kind === "line" || d.kind === "arrow" || d.kind === "box") && Math.hypot(d.x2 - d.x1, d.y2 - d.y1) < scaleUnit() / 60;
     if (tooSmall) redraw();
     else setShapes((s) => [...s, d]);
   };
 
-  const addText = () => {
-    if (textAt && textValue.trim()) {
-      setShapes((s) => [...s, { kind: "text", color, size: scaleUnit() / 22, x: textAt.x, y: textAt.y, text: textValue.trim() }]);
+  const pickColor = (c: string) => {
+    setColor(c);
+    if (editing) {
+      setEditing({ ...editing, color: c });
+      typeRef.current?.focus({ preventScroll: true });
     }
-    setTextAt(null);
+  };
+
+  const pickTool = (t: Tool) => {
+    if (editing) commitText();
+    setTool(t);
   };
 
   const save = async () => {
@@ -165,11 +390,19 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
     if (!c || !baseBlobRef.current) return;
     setSaving(true);
     try {
+      // Whatever is still being typed goes onto the photo too.
+      let final = shapes;
+      if (editing?.text.trim()) {
+        final = [...shapes, { kind: "text", color: editing.color, size: editing.size, x: editing.x, y: editing.y, text: editing.text.replace(/\s+$/, "") }];
+      }
+      setEditing(null);
       draftRef.current = null;
-      redraw();
+      const ctx = c.getContext("2d")!;
+      ctx.drawImage(baseRef.current!, 0, 0);
+      drawShapes(ctx, final);
       const p = await db.photos.get(photoId);
       if (!p) return;
-      if (!shapes.length) {
+      if (!final.length) {
         // All markup removed: go back to the untouched photo.
         const original = p.original ?? p.blob;
         const img = await loadImage(original);
@@ -180,7 +413,7 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
           blob,
           thumb: await makeThumb(c),
           original: p.original ?? p.blob,
-          markup: shapes,
+          markup: final,
         });
       }
       toast("Markup saved");
@@ -191,8 +424,28 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
     }
   };
 
+  // The typing box sits exactly where the text will land on the photo.
+  const s = fit.scale;
+  const box = editing ? textBox({ text: editing.text, size: editing.size }) : { w: 0, h: 0 };
+  const fontPx = editing ? editing.size * s : 16;
+  const outline = editing ? outlineFor(editing.color) : "transparent";
+  const o = Math.max(1, fontPx / 12);
+  const typeStyle: React.CSSProperties = editing
+    ? {
+        left: editing.x * s,
+        top: editing.y * s,
+        width: Math.max(box.w * s + fontPx, fontPx * 3),
+        height: box.h * s + 2,
+        font: textFont(fontPx),
+        lineHeight: LINE_HEIGHT,
+        color: editing.color,
+        caretColor: editing.color,
+        textShadow: `${o}px ${o}px 0 ${outline}, -${o}px ${o}px 0 ${outline}, ${o}px -${o}px 0 ${outline}, -${o}px -${o}px 0 ${outline}, 0 ${o}px 0 ${outline}, 0 -${o}px 0 ${outline}, ${o}px 0 0 ${outline}, -${o}px 0 0 ${outline}`,
+      }
+    : { left: -9999, top: 0, width: 10, height: 10, opacity: 0 };
+
   return (
-    <div className="fade-in fixed inset-0 z-[70] flex flex-col bg-black text-white">
+    <div className="fade-in fixed inset-x-0 z-[70] flex touch-none flex-col bg-black text-white" style={{ top: view.top, height: view.h }}>
       <header className="flex h-[52px] shrink-0 items-center justify-between px-2 pt-[env(safe-area-inset-top)]">
         <button className="h-10 px-3 text-[15px] text-white/80" onClick={onClose}>
           Cancel
@@ -201,8 +454,8 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
           <button
             aria-label="Undo"
             className="flex h-10 w-10 items-center justify-center disabled:opacity-30"
-            disabled={!shapes.length}
-            onClick={() => setShapes((s) => s.slice(0, -1))}
+            disabled={!shapes.length || !!editing}
+            onClick={() => setShapes((all) => all.slice(0, -1))}
           >
             <Undo2 size={20} strokeWidth={1.75} />
           </button>
@@ -212,49 +465,141 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 items-center justify-center p-2">
-        <canvas
-          ref={canvasRef}
-          className="max-h-full max-w-full touch-none select-none"
-          onPointerDown={onDown}
-          onPointerMove={onMove}
-          onPointerUp={onUp}
-          onPointerCancel={onUp}
-        />
+      <div
+        ref={stageRef}
+        className="relative flex min-h-0 flex-1 touch-none items-center justify-center overflow-hidden p-2"
+        onPointerDownCapture={onStageDown}
+        onPointerMoveCapture={onStageMove}
+        onPointerUpCapture={onStageUp}
+        onPointerCancelCapture={onStageUp}
+      >
+        {zoom > 1 && (
+          <button
+            className="absolute left-1/2 top-2 z-10 h-8 -translate-x-1/2 rounded bg-black/70 px-3 text-[12px] font-medium text-white"
+            onClick={() => {
+              setZoom(1);
+              setPan({ x: 0, y: 0 });
+            }}
+          >
+            {Math.round(zoom * 100)}%  ·  Fit
+          </button>
+        )}
+        <div
+          className="relative shrink-0"
+          style={{ width: fit.w, height: fit.h, transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "center" }}
+        >
+          <canvas
+            ref={canvasRef}
+            className="block touch-none select-none"
+            style={{ width: fit.w, height: fit.h }}
+            onPointerDown={onDown}
+            onPointerMove={onMove}
+            onPointerUp={onUp}
+            onPointerCancel={onUp}
+          />
+          <textarea
+            ref={typeRef}
+            aria-label="Text on photo"
+            wrap="off"
+            spellCheck={false}
+            autoCapitalize="sentences"
+            className="absolute resize-none overflow-hidden whitespace-pre bg-transparent p-0 outline outline-1 outline-dashed outline-white/70"
+            style={typeStyle}
+            value={editing?.text ?? ""}
+            onChange={(e) => editing && setEditing({ ...editing, text: e.target.value })}
+          />
+          {editing && (
+            <button
+              type="button"
+              aria-label="Move text"
+              className="absolute flex h-6 w-6 touch-none items-center justify-center rounded bg-white text-black shadow"
+              style={{ left: editing.x * s - 30 / zoom, top: editing.y * s + (box.h * s) / 2 - 12 / zoom, transform: `scale(${1 / zoom})`, transformOrigin: "0 0" }}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                (e.target as Element).setPointerCapture(e.pointerId);
+                gripRef.current = { sx: e.clientX, sy: e.clientY, ox: editing.x, oy: editing.y };
+              }}
+              onPointerMove={(e) => {
+                const g = gripRef.current;
+                if (!g) return;
+                setEditing((ed) => (ed ? { ...ed, x: g.ox + (e.clientX - g.sx) / (s * zoom), y: g.oy + (e.clientY - g.sy) / (s * zoom) } : ed));
+              }}
+              onPointerUp={() => {
+                gripRef.current = null;
+                typeRef.current?.focus({ preventScroll: true });
+              }}
+            >
+              <GripVertical size={13} />
+            </button>
+          )}
+          {editing && (
+            <button
+              type="button"
+              aria-label="Drag to resize text"
+              className="absolute flex h-7 w-7 touch-none items-center justify-center"
+              style={{
+                left: editing.x * s + Math.max(box.w * s + fontPx, fontPx * 3) - 14 / zoom,
+                top: editing.y * s + box.h * s - 14 / zoom,
+                transform: `scale(${1 / zoom})`,
+                transformOrigin: "0 0",
+              }}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                (e.target as Element).setPointerCapture(e.pointerId);
+                const r = canvasRef.current!.getBoundingClientRect();
+                const ax = r.left + editing.x * s * zoom;
+                const ay = r.top + editing.y * s * zoom;
+                cornerRef.current = { ax, ay, d0: Math.max(20, Math.hypot(e.clientX - ax, e.clientY - ay)), size0: editing.size };
+              }}
+              onPointerMove={(e) => {
+                const c = cornerRef.current;
+                if (!c) return;
+                const unit = scaleUnit();
+                const size = Math.min(unit / 4, Math.max(unit / 70, (c.size0 * Math.hypot(e.clientX - c.ax, e.clientY - c.ay)) / c.d0));
+                setEditing((ed) => (ed ? { ...ed, size } : ed));
+                setLastSize(size);
+              }}
+              onPointerUp={() => {
+                cornerRef.current = null;
+                typeRef.current?.focus({ preventScroll: true });
+              }}
+            >
+              <span className="block h-3 w-3 rounded-[2px] border-[1.5px] border-white bg-[#062932] shadow" />
+            </button>
+          )}
+        </div>
       </div>
 
-      {textAt ? (
-        <div className="flex gap-2 px-3 pb-[calc(12px+env(safe-area-inset-bottom))] pt-2">
-          <input
-            autoFocus
-            className="field flex-1 text-ink"
-            placeholder="Type a label"
-            value={textValue}
-            onChange={(e) => setTextValue(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addText()}
-          />
-          <button className="btn btn-primary border-white/20" onClick={addText}>
-            Add
-          </button>
+      <div className="shrink-0 px-3 pb-[calc(10px+env(safe-area-inset-bottom))] pt-2">
+        <div className="mb-3 flex items-center justify-center gap-2.5">
+          {COLORS.map((c) => (
+            <button
+              key={c}
+              aria-label={`Colour ${c}`}
+              onPointerDown={(e) => e.preventDefault()}
+              onClick={() => pickColor(c)}
+              className="h-8 w-8 rounded border-2"
+              style={{ background: c, borderColor: (editing?.color ?? color) === c ? "#fff" : "rgba(255,255,255,0.15)" }}
+            />
+          ))}
         </div>
-      ) : (
-        <div className="shrink-0 px-3 pb-[calc(10px+env(safe-area-inset-bottom))] pt-2">
-          <div className="mb-3 flex justify-center gap-3">
-            {COLORS.map((c) => (
-              <button
-                key={c}
-                aria-label={`Colour ${c}`}
-                onClick={() => setColor(c)}
-                className="h-8 w-8 rounded border-2"
-                style={{ background: c, borderColor: color === c ? "#fff" : "rgba(255,255,255,0.15)" }}
-              />
-            ))}
+        {editing ? (
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[12px] leading-snug text-white/60">Drag the grip to move. Drag the corner square to resize.</p>
+            <button
+              className="flex h-10 shrink-0 items-center gap-1.5 rounded bg-white px-4 text-[14px] font-semibold text-black"
+              onPointerDown={(e) => e.preventDefault()}
+              onClick={commitText}
+            >
+              <Check size={16} /> Place
+            </button>
           </div>
-          <div className="grid grid-cols-4 gap-1">
+        ) : (
+          <div className="grid grid-cols-5 gap-1">
             {TOOLS.map(({ tool: t, label, Icon }) => (
               <button
                 key={t}
-                onClick={() => setTool(t)}
+                onClick={() => pickTool(t)}
                 className={`flex h-14 flex-col items-center justify-center gap-1 rounded text-[12px] ${
                   tool === t ? "bg-white/15 text-white" : "text-white/60"
                 }`}
@@ -264,8 +609,11 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
               </button>
             ))}
           </div>
-        </div>
-      )}
+        )}
+        {tool === "text" && !editing && (
+          <p className="pt-2 text-center text-[12px] text-white/60">Tap the photo to type. Drag text to move it, tap it to edit or resize.</p>
+        )}
+      </div>
     </div>
   );
 }

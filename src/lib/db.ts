@@ -10,6 +10,12 @@ export const PRIORITIES: { value: Priority; label: string }[] = [
   { value: 3, label: "Low" },
 ];
 
+export type JobStatus = "open" | "in_progress" | "done";
+
+export const isOpen = (j: { status: JobStatus }) => j.status !== "done";
+
+export const byPriority = (a: Job, b: Job) => a.priority - b.priority || a.createdAt - b.createdAt;
+
 export interface Material {
   id: string;
   name: string;
@@ -24,7 +30,9 @@ export interface Job {
   notes: string;
   priority: Priority;
   area: string;
-  status: "open" | "done";
+  status: JobStatus;
+  // People doing it (the site diary's subbies).
+  who?: string[];
   createdAt: number;
   updatedAt: number;
   doneAt?: number;
@@ -44,7 +52,7 @@ export interface Note {
 
 export type Shape =
   | { kind: "pen"; color: string; width: number; points: number[] }
-  | { kind: "arrow" | "box"; color: string; width: number; x1: number; y1: number; x2: number; y2: number }
+  | { kind: "line" | "arrow" | "box"; color: string; width: number; x1: number; y1: number; x2: number; y2: number }
   | { kind: "text"; color: string; size: number; x: number; y: number; text: string };
 
 export interface Photo {
