@@ -215,23 +215,109 @@ export function Empty({ title, body }: { title: string; body?: string }) {
   );
 }
 
+// Saved per phone, and kept in step across every screen using the same key.
+const storeEvent = "stored-state";
+
 export function useStoredState<T>(key: string, initial: T) {
-  const [value, setValue] = useState<T>(() => {
+  const read = () => {
     try {
       const raw = localStorage.getItem(key);
       return raw ? (JSON.parse(raw) as T) : initial;
     } catch {
       return initial;
     }
-  });
+  };
+  const [value, setValue] = useState<T>(read);
+  const valueRef = useRef(value);
+  valueRef.current = value;
+
   useEffect(() => {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-    } catch {
-      /* private mode */
-    }
-  }, [key, value]);
-  return [value, setValue] as const;
+    const onChange = (e: Event) => {
+      const d = (e as CustomEvent<{ key: string; value: T }>).detail;
+      if (d.key === key && d.value !== valueRef.current) setValue(d.value);
+    };
+    window.addEventListener(storeEvent, onChange);
+    return () => window.removeEventListener(storeEvent, onChange);
+  }, [key]);
+
+  const set = useCallback(
+    (next: T | ((prev: T) => T)) => {
+      const v = typeof next === "function" ? (next as (prev: T) => T)(valueRef.current) : next;
+      valueRef.current = v;
+      setValue(v);
+      try {
+        localStorage.setItem(key, JSON.stringify(v));
+      } catch {
+        /* private mode */
+      }
+      window.dispatchEvent(new CustomEvent(storeEvent, { detail: { key, value: v } }));
+    },
+    [key],
+  );
+  return [value, set] as const;
+}
+
+/* Small menu that hangs off a button (the site diary's popovers). */
+
+export function Pop({
+  anchor,
+  open,
+  onClose,
+  align = "start",
+  width = 240,
+  children,
+}: {
+  anchor: React.RefObject<HTMLElement | null>;
+  open: boolean;
+  onClose: () => void;
+  align?: "start" | "end";
+  width?: number;
+  children: ReactNode;
+}) {
+  useBackClose(open, onClose);
+  const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number; maxHeight: number } | null>(null);
+  useEffect(() => {
+    if (!open || !anchor.current) return;
+    const r = anchor.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.visualViewport?.height ?? window.innerHeight;
+    const w = Math.min(width, vw - 24);
+    const left = Math.max(12, Math.min(align === "end" ? r.right - w : r.left, vw - w - 12));
+    const below = vh - r.bottom - 12;
+    const above = r.top - 12;
+    setPos(
+      below >= 220 || below >= above
+        ? { left, top: r.bottom + 6, maxHeight: below - 6 }
+        : { left, bottom: window.innerHeight - r.top + 6, maxHeight: above - 6 },
+    );
+  }, [open, anchor, align, width]);
+  if (!open || !pos) return null;
+  return (
+    <div className="fixed inset-0 z-[62]" onClick={onClose}>
+      <div
+        className="fade-in absolute overflow-y-auto overscroll-contain rounded border border-line bg-white p-2 shadow-[0_8px_30px_rgba(15,26,30,0.14)]"
+        style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: Math.min(width, window.innerWidth - 24), maxHeight: pos.maxHeight }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function MenuLabel({ children }: { children: ReactNode }) {
+  return <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted">{children}</div>;
+}
+
+export function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <button type="button" role="switch" aria-checked={on} onClick={() => onChange(!on)} className="flex items-center gap-1.5 py-1 text-[12px] text-muted">
+      <span className={`relative h-[18px] w-8 rounded transition-colors ${on ? "bg-navy" : "bg-[#d5dade]"}`}>
+        <span className={`absolute top-[2px] h-[14px] w-[14px] rounded-[3px] bg-white shadow transition-[left] ${on ? "left-[16px]" : "left-[2px]"}`} />
+      </span>
+      {label}
+    </button>
+  );
 }
 
 export function formatDay(ts: number) {

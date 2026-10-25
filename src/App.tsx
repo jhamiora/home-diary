@@ -1,31 +1,32 @@
 import { useState } from "react";
-import { BookOpen, ListTodo, Menu, Sun, type LucideIcon } from "lucide-react";
+import { BookOpen, ClipboardList, Menu, Sun, type LucideIcon } from "lucide-react";
 import { ToastProvider, useStoredState } from "./lib/ui";
 import { OpenJobCtx } from "./components/JobRow";
 import { JobDetail } from "./components/JobDetail";
 import { TodayPage } from "./pages/TodayPage";
-import { JobsPage } from "./pages/JobsPage";
+import { SiteDiaryPage } from "./pages/SiteDiaryPage";
 import { DiaryPage } from "./pages/DiaryPage";
 import { MorePage } from "./pages/MorePage";
 
-type Tab = "today" | "jobs" | "diary" | "more";
+type Tab = "today" | "site" | "diary" | "more";
 
 const TABS: { id: Tab; label: string; Icon: LucideIcon }[] = [
   { id: "today", label: "Today", Icon: Sun },
-  { id: "jobs", label: "Jobs", Icon: ListTodo },
-  { id: "diary", label: "Diary", Icon: BookOpen },
+  { id: "site", label: "Site Diary", Icon: ClipboardList },
+  { id: "diary", label: "Journal", Icon: BookOpen },
   { id: "more", label: "More", Icon: Menu },
 ];
 
 const PAGES: Record<Tab, () => React.JSX.Element> = {
   today: TodayPage,
-  jobs: JobsPage,
+  site: SiteDiaryPage,
   diary: DiaryPage,
   more: MorePage,
 };
 
 export default function App() {
-  const [tab, setTab] = useStoredState<Tab>("tab", "today");
+  const [stored, setTab] = useStoredState<Tab | "jobs">("tab", "site");
+  const tab: Tab = stored === "jobs" ? "site" : stored;
   const [jobId, setJobId] = useState<string | null>(null);
 
   return (

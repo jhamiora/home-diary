@@ -1,19 +1,18 @@
 import { useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { Check, ListChecks, Share2 } from "lucide-react";
-import { PRIORITIES, db, dayKey, type Job } from "../lib/db";
+import { PRIORITIES, byPriority, db, dayKey, isOpen, type Job } from "../lib/db";
 import { buildShoppingList, lineLabel, setLineHave, shoppingText, type ShopLine } from "../lib/materials";
 import { Empty, SectionLabel, Sheet, useStoredState, useToast } from "../lib/ui";
 import { JobRow, PRIORITY_BAR, useJobActions } from "../components/JobRow";
-import { byPriority } from "./JobsPage";
 
 function PlanSheet({ open, onClose, jobs }: { open: boolean; onClose: () => void; jobs: Job[] }) {
   const { setToday } = useJobActions();
   const today = dayKey();
-  const openJobs = jobs.filter((j) => j.status === "open").sort(byPriority);
+  const openJobs = jobs.filter(isOpen).sort(byPriority);
   return (
     <Sheet open={open} onClose={onClose} title="Pick today's jobs">
-      {!openJobs.length && <p className="px-4 pb-4 text-[14px] text-muted">No open jobs. Add some on the Jobs tab.</p>}
+      {!openJobs.length && <p className="px-4 pb-4 text-[14px] text-muted">No open jobs. Add some on the Site Diary tab.</p>}
       {PRIORITIES.map((p) => {
         const list = openJobs.filter((j) => j.priority === p.value);
         if (!list.length) return null;
@@ -78,11 +77,11 @@ export function TodayPage() {
   const today = dayKey();
 
   const all = jobs ?? [];
-  const todays = all.filter((j) => j.todayDate === today && j.status === "open").sort(byPriority);
+  const todays = all.filter((j) => j.todayDate === today && isOpen(j)).sort(byPriority);
   const doneToday = all.filter((j) => j.status === "done" && j.doneAt && dayKey(new Date(j.doneAt)) === today);
-  const leftOver = all.filter((j) => j.status === "open" && j.todayDate && j.todayDate < today);
+  const leftOver = all.filter((j) => isOpen(j) && j.todayDate && j.todayDate < today);
 
-  const shopJobs = scope === "today" ? todays : all.filter((j) => j.status === "open");
+  const shopJobs = scope === "today" ? todays : all.filter(isOpen);
   const lines = buildShoppingList(shopJobs);
   const need = lines.filter((l) => !l.have);
 

@@ -4,38 +4,39 @@ import { Check, Plus, Sun, Trash2 } from "lucide-react";
 import { PRIORITIES, db, dayKey, deleteJob, deletePhotos, uid, type Job, type Material, type Note } from "../lib/db";
 import { ConfirmSheet, Screen, SectionLabel, Sheet, useToast } from "../lib/ui";
 import { lineLabel } from "../lib/materials";
+import { OUTSIDE, WHOLE_HOUSE, placeLabel, usePlaces } from "../lib/places";
 import { AddPhotoButtons, PhotoGrid } from "./Photos";
 import { NoteCard, NoteComposer } from "./Notes";
 import { useJobActions } from "./JobRow";
 
-export function useAreas() {
-  return (
-    useLiveQuery(async () => {
-      const jobs = await db.jobs.toArray();
-      return [...new Set(jobs.map((j) => j.area.trim()).filter(Boolean))].sort();
-    }, []) ?? []
-  );
-}
-
 export function AreaPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const areas = useAreas();
+  const { places, addPlace } = usePlaces();
+  const [adding, setAdding] = useState("");
   return (
     <div>
-      <input
-        className="field"
-        placeholder="Where? e.g. Kitchen, Deck, Garage"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      {areas.length > 0 && (
-        <div className="no-scrollbar -mx-4 mt-2 flex gap-1.5 overflow-x-auto px-4">
-          {areas.map((a) => (
-            <button key={a} type="button" className="tab" aria-pressed={value.trim() === a} onClick={() => onChange(value.trim() === a ? "" : a)}>
-              {a}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="flex flex-wrap gap-1.5">
+        {[WHOLE_HOUSE, OUTSIDE, ...places].map((p) => (
+          <button key={p || "whole"} type="button" className="tab" aria-pressed={value === p} onClick={() => onChange(p)}>
+            {placeLabel(p)}
+          </button>
+        ))}
+      </div>
+      <form
+        className="mt-2 flex gap-1.5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const n = addPlace(adding);
+          if (n) {
+            onChange(n);
+            setAdding("");
+          }
+        }}
+      >
+        <input className="field h-9 py-0 text-[15px]" placeholder="Add a part of the house" value={adding} onChange={(e) => setAdding(e.target.value)} />
+        <button className="btn h-9 shrink-0 px-3 text-[14px]" disabled={!adding.trim()}>
+          Add
+        </button>
+      </form>
     </div>
   );
 }
@@ -191,12 +192,20 @@ function JobDetailInner({ job, notes, onClose }: { job: Job; notes: Note[]; onCl
       }
     >
       <div className="space-y-3 px-4 pt-4">
-        <input
-          className="w-full bg-transparent text-[22px] font-semibold leading-tight outline-none placeholder:text-[#a3abb2]"
-          placeholder="Job name"
+        <textarea
+          rows={1}
+          ref={(el) => {
+            if (el) {
+              el.style.height = "auto";
+              if (el.scrollHeight) el.style.height = `${el.scrollHeight}px`;
+            }
+          }}
+          className="w-full resize-none bg-transparent text-[20px] font-semibold leading-snug outline-none placeholder:text-[#a3abb2]"
+          placeholder="What needs doing?"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
+        {job.who?.length ? <p className="-mt-1 text-[13px] text-muted">Who: {job.who.join(", ")}</p> : null}
         <PrioritySeg value={job.priority} onChange={(p) => patch({ priority: p })} />
         <AreaPicker value={area} onChange={setArea} />
         <textarea

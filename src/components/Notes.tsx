@@ -15,7 +15,7 @@ export function NoteComposer({ jobId: fixedJobId, onSaved }: { jobId?: string; o
     photoIds: [] as string[],
     jobId: "",
   });
-  const openJobs = useLiveQuery(() => db.jobs.where("status").equals("open").sortBy("priority"), []);
+  const openJobs = useLiveQuery(() => db.jobs.where("status").notEqual("done").sortBy("priority"), []);
   const area = useRef<HTMLTextAreaElement>(null);
   const dirty = draft.text.trim().length > 0 || draft.photoIds.length > 0;
 
