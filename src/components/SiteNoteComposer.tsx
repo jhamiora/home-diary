@@ -340,12 +340,12 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
             type="button"
             aria-pressed={draft.today}
             onClick={() => patch({ today: !draft.today })}
-            className={`flex h-9 min-w-[4.25rem] flex-1 items-center justify-center gap-1 rounded border px-1.5 text-[12px] font-medium ${
+            className={`flex h-9 min-w-[5rem] flex-1 items-center justify-center gap-1 whitespace-nowrap rounded border px-1.5 text-[12px] font-medium ${
               draft.today ? "border-navy bg-navy text-white" : "border-line text-muted"
             }`}
           >
             <Sun size={13} fill={draft.today ? "currentColor" : "none"} />
-            Today
+            Do today
           </button>
         </div>
 
@@ -448,7 +448,7 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
         >
           <input
             className="h-9 min-w-0 flex-1 rounded border border-line px-2 text-[16px] outline-none focus:border-navy"
-            placeholder="Add a part of the house"
+            placeholder="Add location"
             value={newPlace}
             onChange={(e) => setNewPlace(e.target.value)}
           />

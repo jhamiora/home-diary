@@ -31,7 +31,7 @@ export function AreaPicker({ value, onChange }: { value: string; onChange: (v: s
           }
         }}
       >
-        <input className="field h-9 py-0 text-[15px]" placeholder="Add a part of the house" value={adding} onChange={(e) => setAdding(e.target.value)} />
+        <input className="field h-9 py-0 text-[15px]" placeholder="Add location" value={adding} onChange={(e) => setAdding(e.target.value)} />
         <button className="btn h-9 shrink-0 px-3 text-[14px]" disabled={!adding.trim()}>
           Add
         </button>
