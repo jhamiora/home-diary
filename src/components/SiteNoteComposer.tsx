@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Camera, CheckCircle, ChevronDown, ImagePlus, Mic, Package, PenLine, Square, Sun, X } from "lucide-react";
+import { Camera, CheckCircle, ImagePlus, MapPin, Mic, Package, PenLine, Square, Sun, X } from "lucide-react";
 import { PRIORITIES, askPersistentStorage, db, dayKey, uid, type Job, type Material, type Priority } from "../lib/db";
 import { OUTSIDE, WHOLE_HOUSE, parseMaterial, placeLabel, usePlaces } from "../lib/places";
 import { lineLabel } from "../lib/materials";
@@ -22,6 +22,8 @@ export const PRIORITY_STYLE: Record<Priority, string> = {
   2: "border-med text-med",
   3: "border-line text-muted",
 };
+
+const PRIORITY_DOT: Record<Priority, string> = { 1: "bg-high", 2: "bg-med", 3: "bg-low" };
 
 interface Draft {
   text: string;
@@ -264,72 +266,65 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
             {listening && <div className="absolute bottom-3.5 right-12 text-[12px] text-muted">Listening...</div>}
           </div>
 
-          <div className="flex items-center gap-2 pt-1">
-            <button
-              type="button"
-              aria-pressed={showMaterial}
-              onClick={() => setShowMaterial(!showMaterial)}
-              className={`relative flex h-9 min-w-0 flex-1 basis-0 items-center justify-center gap-1.5 rounded border px-2.5 text-[14px] font-semibold ${
-                showMaterial ? "border-navy bg-navy text-white" : "border-navy text-navy"
-              }`}
-            >
-              <Package size={16} className="shrink-0" />
-              <span className="truncate">Materials</span>
-              {draft.materials.length > 0 && (
-                <span className="pointer-events-none absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded bg-ok px-1 text-[10px] text-white">
-                  {draft.materials.length}
-                </span>
-              )}
-            </button>
-            <button
-              type="button"
-              disabled={draft.photoIds.length >= MAX_PHOTOS}
-              onClick={() => camInput.current?.click()}
-              className="flex h-9 min-w-0 flex-1 basis-0 items-center justify-center gap-1.5 rounded border border-navy px-2.5 text-[14px] font-semibold text-navy disabled:opacity-40"
-            >
-              <Camera size={16} />
-              Photo
-            </button>
-            <button
-              type="button"
-              disabled={!draft.text.trim() || busy || listening}
-              onClick={submit}
-              className="h-9 shrink-0 rounded bg-navy px-3 text-[14px] font-medium text-white disabled:opacity-40"
-            >
-              Add note
-            </button>
-          </div>
         </div>
 
-        <div className="flex min-w-0 items-center gap-1.5">
-            <button
-              ref={placeBtn}
-              type="button"
-              onClick={() => setPlaceOpen(true)}
-              className="flex h-9 shrink-0 items-center gap-1 rounded border border-line px-2 text-[14px] font-medium"
-            >
-              <span className="max-w-[8rem] truncate">{placeSummary}</span>
-              <ChevronDown size={12} className="opacity-50" />
-            </button>
+        <div className="flex min-w-0 gap-1.5">
+          <button
+            ref={placeBtn}
+            type="button"
+            onClick={() => setPlaceOpen(true)}
+            className="flex h-8 min-w-0 items-center gap-1.5 rounded border border-line px-2 text-[13px] font-medium"
+          >
+            <MapPin size={13} className="shrink-0 text-muted" />
+            <span className="truncate">{placeSummary}</span>
+          </button>
           <button
             ref={priorityBtn}
             type="button"
             onClick={() => setPriorityOpen(true)}
-            className={`flex h-9 shrink-0 items-center gap-1 rounded border px-2 text-[12px] font-semibold ${PRIORITY_STYLE[draft.priority]}`}
+            className="flex h-8 shrink-0 items-center gap-[7px] rounded border border-line px-2 text-[13px] font-medium"
           >
+            <span className={`h-2 w-2 rounded-[2px] ${PRIORITY_DOT[draft.priority]}`} />
             {priorityLabel}
-            <ChevronDown size={12} className="opacity-50" />
           </button>
           <button
             type="button"
             aria-pressed={draft.today}
             onClick={() => patch({ today: !draft.today })}
-            className={`flex h-9 min-w-[5rem] flex-1 items-center justify-center gap-1 whitespace-nowrap rounded border px-1.5 text-[12px] font-medium ${
+            className={`flex h-8 shrink-0 items-center gap-1.5 rounded border px-2 text-[13px] font-medium ${
               draft.today ? "border-navy bg-navy text-white" : "border-line text-muted"
             }`}
           >
             <Sun size={13} fill={draft.today ? "currentColor" : "none"} />
             Do today
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            aria-pressed={showMaterial}
+            onClick={() => setShowMaterial(!showMaterial)}
+            className={`relative flex h-10 items-center justify-center gap-1.5 rounded border text-[14px] font-medium ${
+              showMaterial ? "border-navy bg-navy text-white" : "border-line"
+            }`}
+          >
+            <Package size={16} />
+            Materials
+            {draft.materials.length > 0 && (
+              <span className="pointer-events-none absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded bg-ok px-1 text-[10px] text-white">
+                {draft.materials.length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            disabled={draft.photoIds.length >= MAX_PHOTOS}
+            onClick={() => camInput.current?.click()}
+            className="flex h-10 items-center justify-center gap-1.5 rounded border border-line text-[14px] font-medium disabled:opacity-40"
+          >
+            <Camera size={16} />
+            Photo
           </button>
         </div>
 
@@ -390,6 +385,15 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
           </div>
         </div>
         {draft.photoIds.length > 0 && <p className="-mt-2 text-[11px] text-muted">Tap the pencil on a photo to mark it up before saving.</p>}
+
+        <button
+          type="button"
+          disabled={!draft.text.trim() || busy || listening}
+          onClick={submit}
+          className="h-[46px] w-full rounded bg-navy text-[15px] font-semibold text-white disabled:opacity-40"
+        >
+          Add note
+        </button>
 
       </div>
 
