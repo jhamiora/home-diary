@@ -318,9 +318,10 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
             )}
           </button>
           <button
+            ref={photoBtn}
             type="button"
             disabled={draft.photoIds.length >= MAX_PHOTOS}
-            onClick={() => camInput.current?.click()}
+            onClick={() => setPhotoMenu(true)}
             className="flex h-10 items-center justify-center gap-1.5 rounded border border-line text-[14px] font-medium disabled:opacity-40"
           >
             <Camera size={16} />
@@ -367,23 +368,13 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
           </div>
         )}
 
-        <div className="flex items-start gap-2">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-            <button
-              ref={photoBtn}
-              type="button"
-              aria-label="Add photo"
-              disabled={draft.photoIds.length >= MAX_PHOTOS}
-              onClick={() => setPhotoMenu(true)}
-              className="flex h-14 w-14 shrink-0 items-center justify-center rounded border border-dashed border-[#c3c9ce] text-muted disabled:opacity-40"
-            >
-              <ImagePlus size={20} strokeWidth={1.6} />
-            </button>
+        {draft.photoIds.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 pt-1">
             {draft.photoIds.map((id, i) => (
               <StagedThumb key={id} id={id} onView={() => setViewAt(i)} onMarkup={() => setMarkupId(id)} onRemove={() => removePhoto(id)} />
             ))}
           </div>
-        </div>
+        )}
         {draft.photoIds.length > 0 && <p className="-mt-2 text-[11px] text-muted">Tap the pencil on a photo to mark it up before saving.</p>}
 
         <button

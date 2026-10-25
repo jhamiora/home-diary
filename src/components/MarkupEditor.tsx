@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpRight, Pencil, Square, Type, Undo2 } from "lucide-react";
+import { ArrowUpRight, Minus, Pencil, Square, Type, Undo2 } from "lucide-react";
 import { db, type Shape } from "../lib/db";
 import { canvasToBlob, loadImage, makeThumb } from "../lib/photos";
 import { useBackClose, useToast } from "../lib/ui";
 
-const COLORS = ["#e11d1d", "#facc15", "#ffffff", "#111111"];
-type Tool = "pen" | "arrow" | "box" | "text";
+// Fluoro green reads on timber, concrete and dark photos alike.
+const COLORS = ["#e11d1d", "#39ff14", "#facc15", "#ff7a00", "#1e90ff", "#ffffff", "#111111"];
+type Tool = "pen" | "line" | "arrow" | "box" | "text";
 
 const TOOLS: { tool: Tool; label: string; Icon: typeof Pencil }[] = [
   { tool: "pen", label: "Draw", Icon: Pencil },
+  { tool: "line", label: "Line", Icon: Minus },
   { tool: "arrow", label: "Arrow", Icon: ArrowUpRight },
   { tool: "box", label: "Box", Icon: Square },
   { tool: "text", label: "Text", Icon: Type },
@@ -28,6 +30,12 @@ export function drawShapes(ctx: CanvasRenderingContext2D, shapes: Shape[]) {
         else ctx.lineTo(s.points[i], s.points[i + 1]);
       }
       if (s.points.length === 2) ctx.lineTo(s.points[0] + 0.1, s.points[1]);
+      ctx.stroke();
+    } else if (s.kind === "line") {
+      ctx.lineWidth = s.width;
+      ctx.beginPath();
+      ctx.moveTo(s.x1, s.y1);
+      ctx.lineTo(s.x2, s.y2);
       ctx.stroke();
     } else if (s.kind === "box") {
       ctx.lineWidth = s.width;
@@ -136,7 +144,7 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
     if (!d) return;
     const { x, y } = toImage(e);
     if (d.kind === "pen") d.points.push(x, y);
-    else if (d.kind === "arrow" || d.kind === "box") {
+    else if (d.kind === "line" || d.kind === "arrow" || d.kind === "box") {
       d.x2 = x;
       d.y2 = y;
     }
@@ -148,7 +156,7 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
     draftRef.current = null;
     if (!d) return;
     const tooSmall =
-      (d.kind === "arrow" || d.kind === "box") && Math.hypot(d.x2 - d.x1, d.y2 - d.y1) < scaleUnit() / 60;
+      (d.kind === "line" || d.kind === "arrow" || d.kind === "box") && Math.hypot(d.x2 - d.x1, d.y2 - d.y1) < scaleUnit() / 60;
     if (tooSmall) redraw();
     else setShapes((s) => [...s, d]);
   };
@@ -239,7 +247,7 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
         </div>
       ) : (
         <div className="shrink-0 px-3 pb-[calc(10px+env(safe-area-inset-bottom))] pt-2">
-          <div className="mb-3 flex justify-center gap-3">
+          <div className="mb-3 flex justify-center gap-2.5">
             {COLORS.map((c) => (
               <button
                 key={c}
@@ -250,7 +258,7 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
               />
             ))}
           </div>
-          <div className="grid grid-cols-4 gap-1">
+          <div className="grid grid-cols-5 gap-1">
             {TOOLS.map(({ tool: t, label, Icon }) => (
               <button
                 key={t}
