@@ -83,7 +83,7 @@ export function MaterialsPage() {
           <p className="mt-1 text-[14px] leading-relaxed text-muted">
             {todayOnly
               ? "Put notes on today with the Today button on each card, or turn Today's jobs off."
-              : "Tap Materials on the Add site note box to add what each job needs."}
+              : "Tap Materials on the Add task box to add what each job needs."}
           </p>
         </div>
       )}
