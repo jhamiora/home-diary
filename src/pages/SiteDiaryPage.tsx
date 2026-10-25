@@ -55,7 +55,7 @@ export function SiteDiaryPage() {
         ) : (
           <button className="flex h-11 items-center gap-2 rounded bg-navy px-5 text-[15px] font-medium text-white active:opacity-90" onClick={() => setComposerOpen(true)}>
             <Plus size={16} />
-            Add site note
+            Add task
           </button>
         )}
 
@@ -102,7 +102,7 @@ export function SiteDiaryPage() {
           <div className="py-12 text-center">
             <div className="text-[15px] font-medium">{hasFilters ? "No notes found" : "Nothing on the list"}</div>
             <p className="mt-1 text-[14px] text-muted">
-              {hasFilters ? "Try clearing the filters." : "Tap Add site note to log a job with photos and materials."}
+              {hasFilters ? "Try clearing the filters." : "Tap Add task to log a job with photos and materials."}
             </p>
           </div>
         )}
