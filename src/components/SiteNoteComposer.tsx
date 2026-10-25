@@ -4,7 +4,8 @@ import { PRIORITIES, askPersistentStorage, db, dayKey, uid, type Job, type Mater
 import { OUTSIDE, WHOLE_HOUSE, parseMaterial, placeLabel, usePlaces } from "../lib/places";
 import { lineLabel } from "../lib/materials";
 import { savePhotoFiles, usePhotoUrl } from "../lib/photos";
-import { MenuLabel, Pop, useStoredState, useToast } from "../lib/ui";
+import { Pop, useStoredState, useToast } from "../lib/ui";
+import { LocationMenu, PRIORITY_DOT, PriorityMenu } from "./Pickers";
 import { appendSaid, dictationSupported, useDictation } from "../lib/dictation";
 import { PhotoViewer } from "./Photos";
 import { MarkupEditor } from "./MarkupEditor";
@@ -17,14 +18,6 @@ import { MarkupEditor } from "./MarkupEditor";
  */
 
 const MAX_PHOTOS = 10;
-
-export const PRIORITY_STYLE: Record<Priority, string> = {
-  1: "border-high text-high",
-  2: "border-med text-med",
-  3: "border-line text-muted",
-};
-
-const PRIORITY_DOT: Record<Priority, string> = { 1: "bg-high", 2: "bg-med", 3: "bg-low" };
 
 interface Draft {
   text: string;
@@ -72,13 +65,12 @@ function StagedThumb({ id, onView, onMarkup, onRemove }: { id: string; onView: (
 
 export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; onAdded?: (ids: string[]) => void }) {
   const toast = useToast();
-  const { places, addPlace } = usePlaces();
+  const { places } = usePlaces();
   const [draft, setDraft] = useStoredState<Draft>("composer:draft", emptyDraft());
   // The place sticks between notes, like the site diary's unit.
   const [picked, setPicked] = useStoredState<string[]>("composer:places", [WHOLE_HOUSE]);
   const [showMaterial, setShowMaterial] = useState(draft.materials.length > 0);
   const [materialText, setMaterialText] = useState("");
-  const [newPlace, setNewPlace] = useState("");
   const [placeOpen, setPlaceOpen] = useState(false);
   const [priorityOpen, setPriorityOpen] = useState(false);
   const [photoMenu, setPhotoMenu] = useState(false);
@@ -123,21 +115,18 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
     setMaterialText("");
   };
 
-  const pickPlace = (p: string) => {
-    setPicked([p]);
-    setPlaceOpen(false);
-  };
-
   const close = async () => {
     stopDictation();
     onClose();
   };
 
+  // Clear empties the box and leaves it open for the next task.
   const discard = async () => {
+    stopDictation();
     await db.photos.bulkDelete(draft.photoIds);
     setDraft(emptyDraft({ priority: draft.priority }));
     setMaterialText("");
-    close();
+    if (textRef.current) textRef.current.value = "";
   };
 
   const submit = async () => {
@@ -178,7 +167,7 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
         ids.push(job.id);
       }
       askPersistentStorage();
-      toast(ids.length > 1 ? `${ids.length} notes added` : "Note added");
+      toast(ids.length > 1 ? `${ids.length} tasks added` : "Task added");
       setDraft(emptyDraft({ priority: draft.priority }));
       setMaterialText("");
       if (el) el.value = "";
@@ -197,7 +186,7 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
     <div className="screen-in rounded border border-line bg-white shadow-sm">
       <div className="space-y-4 p-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-[14px] font-medium">New site note</h3>
+          <h3 className="text-[14px] font-medium">New task</h3>
           <div className="flex items-center">
             {(draft.text.trim() || draft.photoIds.length > 0) && (
               <button className="h-8 px-2 text-[13px] text-muted" onClick={discard}>
@@ -347,7 +336,7 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
           onClick={submit}
           className="h-[46px] w-full rounded bg-navy text-[15px] font-semibold text-white disabled:opacity-40"
         >
-          Add note
+          Add task
         </button>
 
       </div>
@@ -364,54 +353,8 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
         </button>
       </Pop>
 
-      <Pop anchor={placeBtn} open={placeOpen} onClose={() => setPlaceOpen(false)} width={240}>
-        {[WHOLE_HOUSE, OUTSIDE, ...places].map((p) => (
-          <label key={p || "whole"} className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-[14px] active:bg-soft">
-            <input type="checkbox" className="h-4 w-4 accent-[#062932]" checked={placesPicked.includes(p)} onChange={() => pickPlace(p)} />
-            {placeLabel(p)}
-          </label>
-        ))}
-        <form
-          className="mt-1 flex gap-1.5 border-t border-line pt-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const n = addPlace(newPlace);
-            if (n) {
-              setNewPlace("");
-              setPicked([n]);
-              setPlaceOpen(false);
-            }
-          }}
-        >
-          <input
-            className="h-9 min-w-0 flex-1 rounded border border-line px-2 text-[16px] outline-none focus:border-navy"
-            placeholder="Add location"
-            value={newPlace}
-            onChange={(e) => setNewPlace(e.target.value)}
-          />
-          <button className="h-9 shrink-0 rounded bg-navy px-3 text-[13px] font-medium text-white disabled:opacity-40" disabled={!newPlace.trim()}>
-            Add
-          </button>
-        </form>
-      </Pop>
-
-      <Pop anchor={priorityBtn} open={priorityOpen} onClose={() => setPriorityOpen(false)} width={200}>
-        <MenuLabel>Priority</MenuLabel>
-        {PRIORITIES.map((p) => (
-          <button
-            key={p.value}
-            onClick={() => {
-              patch({ priority: p.value });
-              setPriorityOpen(false);
-            }}
-            className={`mt-1 flex w-full items-center gap-2 rounded border px-3 py-2 text-[13px] font-medium ${
-              draft.priority === p.value ? "border-navy bg-navy text-white" : PRIORITY_STYLE[p.value]
-            }`}
-          >
-            {p.label}
-          </button>
-        ))}
-      </Pop>
+      <LocationMenu anchor={placeBtn} open={placeOpen} onClose={() => setPlaceOpen(false)} value={placesPicked[0]} onPick={(p) => setPicked([p])} />
+      <PriorityMenu anchor={priorityBtn} open={priorityOpen} onClose={() => setPriorityOpen(false)} value={draft.priority} onPick={(priority) => patch({ priority })} />
 
       {viewAt !== null && <PhotoViewer ids={draft.photoIds} start={viewAt} onClose={() => setViewAt(null)} onDelete={removePhoto} />}
       {markupId && <MarkupEditor photoId={markupId} onClose={() => setMarkupId(null)} />}

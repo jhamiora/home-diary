@@ -62,7 +62,7 @@ export function SiteDiaryPage() {
         <div className="flex flex-col gap-2.5">
           <div className="relative">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-            <input className="field h-9 py-0 pl-9 text-[14px]" placeholder="Search notes..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input className="field h-9 py-0 pl-9 text-[14px]" placeholder="Search tasks..." value={search} onChange={(e) => setSearch(e.target.value)} />
             {search && (
               <button aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted" onClick={() => setSearch("")}>
                 <X size={16} />

@@ -42,14 +42,20 @@ export function MaterialsPage() {
 
   const share = async () => {
     const text = shoppingText(need);
+    // The phone's share sheet when it has one; otherwise the list is copied.
     try {
-      if (navigator.share) await navigator.share({ text });
-      else {
-        await navigator.clipboard.writeText(text);
-        toast("List copied");
+      if (navigator.share) {
+        await navigator.share({ text });
+        return;
       }
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast("List copied");
     } catch {
-      /* cancelled */
+      toast("Couldn't copy the list");
     }
   };
 
