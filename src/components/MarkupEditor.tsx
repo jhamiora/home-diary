@@ -55,17 +55,22 @@ export function drawShapes(ctx: CanvasRenderingContext2D, shapes: Shape[]) {
       ctx.lineWidth = s.width;
       ctx.strokeRect(Math.min(s.x1, s.x2), Math.min(s.y1, s.y2), Math.abs(s.x2 - s.x1), Math.abs(s.y2 - s.y1));
     } else if (s.kind === "arrow") {
+      // The shaft stops inside the head so its round end never blunts the point.
       ctx.lineWidth = s.width;
       const angle = Math.atan2(s.y2 - s.y1, s.x2 - s.x1);
-      const head = s.width * 4;
+      const len = Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
+      const head = Math.min(s.width * 5.5, len * 0.6);
+      const spread = Math.PI / 9;
+      const stop = head * 0.7;
       ctx.beginPath();
       ctx.moveTo(s.x1, s.y1);
-      ctx.lineTo(s.x2, s.y2);
+      ctx.lineTo(s.x2 - stop * Math.cos(angle), s.y2 - stop * Math.sin(angle));
       ctx.stroke();
       ctx.beginPath();
       ctx.moveTo(s.x2, s.y2);
-      ctx.lineTo(s.x2 - head * Math.cos(angle - Math.PI / 7), s.y2 - head * Math.sin(angle - Math.PI / 7));
-      ctx.lineTo(s.x2 - head * Math.cos(angle + Math.PI / 7), s.y2 - head * Math.sin(angle + Math.PI / 7));
+      ctx.lineTo(s.x2 - head * Math.cos(angle - spread), s.y2 - head * Math.sin(angle - spread));
+      ctx.lineTo(s.x2 - head * 0.82 * Math.cos(angle), s.y2 - head * 0.82 * Math.sin(angle));
+      ctx.lineTo(s.x2 - head * Math.cos(angle + spread), s.y2 - head * Math.sin(angle + spread));
       ctx.closePath();
       ctx.fill();
     } else if (s.kind === "text") {
@@ -114,6 +119,80 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
   // Screen size of the photo, and the part of the screen the keyboard leaves free.
   const [fit, setFit] = useState({ w: 0, h: 0, scale: 1 });
   const [view, setView] = useState({ h: window.innerHeight, top: 0 });
+  // Two-finger pinch zooms and moves the photo, never the whole screen.
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const zoomRef = useRef({ zoom: 1, pan: { x: 0, y: 0 } });
+  zoomRef.current = { zoom, pan };
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinchRef = useRef<{ d0: number; z0: number; v: { x: number; y: number } } | null>(null);
+  const pinchingRef = useRef(false);
+
+  const stageCentre = () => {
+    const r = stageRef.current!.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  };
+
+  // Zoom about a screen point, keeping that point under the fingers.
+  const zoomAbout = (mx: number, my: number, z: number, v: { x: number; y: number }) => {
+    const nz = Math.min(6, Math.max(1, z));
+    if (nz <= 1.001) {
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+      return;
+    }
+    const c = stageCentre();
+    setZoom(nz);
+    setPan({ x: mx - c.x - nz * v.x, y: my - c.y - nz * v.y });
+  };
+
+  const localAt = (mx: number, my: number) => {
+    const c = stageCentre();
+    const { zoom: z, pan: p } = zoomRef.current;
+    return { x: (mx - c.x - p.x) / z, y: (my - c.y - p.y) / z };
+  };
+
+  const onStageDown = (e: React.PointerEvent) => {
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      const mx = (a.x + b.x) / 2;
+      const my = (a.y + b.y) / 2;
+      pinchRef.current = { d0: Math.max(10, Math.hypot(a.x - b.x, a.y - b.y)), z0: zoomRef.current.zoom, v: localAt(mx, my) };
+      pinchingRef.current = true;
+      // The first finger's line was the start of a pinch, not a mark.
+      draftRef.current = null;
+      dragRef.current = null;
+      redraw();
+    }
+  };
+  const onStageMove = (e: React.PointerEvent) => {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const p = pinchRef.current;
+    if (!p || pointers.current.size < 2) return;
+    const [a, b] = [...pointers.current.values()];
+    zoomAbout((a.x + b.x) / 2, (a.y + b.y) / 2, (p.z0 * Math.hypot(a.x - b.x, a.y - b.y)) / p.d0, p.v);
+  };
+  const onStageUp = (e: React.PointerEvent) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinchRef.current = null;
+    if (pointers.current.size === 0) setTimeout(() => (pinchingRef.current = false), 0);
+  };
+
+  // Trackpad pinch (ctrl + wheel) and two-finger scroll on a computer.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const { zoom: z, pan: p } = zoomRef.current;
+      if (e.ctrlKey) zoomAbout(e.clientX, e.clientY, z * Math.exp(-e.deltaY * 0.01), localAt(e.clientX, e.clientY));
+      else if (z > 1) setPan({ x: p.x - e.deltaX, y: p.y - e.deltaY });
+    };
+    stage.addEventListener("wheel", onWheel, { passive: false });
+    return () => stage.removeEventListener("wheel", onWheel);
+  }, [ready]);
 
   useEffect(() => {
     let alive = true;
@@ -217,7 +296,7 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
   };
 
   const onDown = (e: React.PointerEvent) => {
-    if (!ready) return;
+    if (!ready || pinchingRef.current) return;
     const { x, y } = toImage(e);
     if (tool === "text") {
       e.preventDefault();
@@ -238,6 +317,7 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
   };
 
   const onMove = (e: React.PointerEvent) => {
+    if (pinchingRef.current) return;
     const drag = dragRef.current;
     if (drag) {
       const dx = e.clientX - drag.sx;
@@ -245,7 +325,7 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
       if (!drag.moved && Math.hypot(dx, dy) < 6) return;
       drag.moved = true;
       setShapes((all) =>
-        all.map((s, i) => (i === drag.index && s.kind === "text" ? { ...s, x: drag.ox + dx / fit.scale, y: drag.oy + dy / fit.scale } : s)),
+        all.map((s, i) => (i === drag.index && s.kind === "text" ? { ...s, x: drag.ox + dx / (fit.scale * zoom), y: drag.oy + dy / (fit.scale * zoom) } : s)),
       );
       return;
     }
@@ -261,6 +341,7 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
   };
 
   const onUp = (e: React.PointerEvent) => {
+    if (pinchingRef.current) return;
     if (tool === "text" && ready) {
       const drag = dragRef.current;
       dragRef.current = null;
@@ -364,7 +445,7 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
     : { left: -9999, top: 0, width: 10, height: 10, opacity: 0 };
 
   return (
-    <div className="fade-in fixed inset-x-0 z-[70] flex flex-col bg-black text-white" style={{ top: view.top, height: view.h }}>
+    <div className="fade-in fixed inset-x-0 z-[70] flex touch-none flex-col bg-black text-white" style={{ top: view.top, height: view.h }}>
       <header className="flex h-[52px] shrink-0 items-center justify-between px-2 pt-[env(safe-area-inset-top)]">
         <button className="h-10 px-3 text-[15px] text-white/80" onClick={onClose}>
           Cancel
@@ -384,8 +465,29 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
         </div>
       </header>
 
-      <div ref={stageRef} className="flex min-h-0 flex-1 items-center justify-center p-2">
-        <div className="relative shrink-0" style={{ width: fit.w, height: fit.h }}>
+      <div
+        ref={stageRef}
+        className="relative flex min-h-0 flex-1 touch-none items-center justify-center overflow-hidden p-2"
+        onPointerDownCapture={onStageDown}
+        onPointerMoveCapture={onStageMove}
+        onPointerUpCapture={onStageUp}
+        onPointerCancelCapture={onStageUp}
+      >
+        {zoom > 1 && (
+          <button
+            className="absolute left-1/2 top-2 z-10 h-8 -translate-x-1/2 rounded bg-black/70 px-3 text-[12px] font-medium text-white"
+            onClick={() => {
+              setZoom(1);
+              setPan({ x: 0, y: 0 });
+            }}
+          >
+            {Math.round(zoom * 100)}%  ·  Fit
+          </button>
+        )}
+        <div
+          className="relative shrink-0"
+          style={{ width: fit.w, height: fit.h, transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "center" }}
+        >
           <canvas
             ref={canvasRef}
             className="block touch-none select-none"
@@ -410,8 +512,8 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
             <button
               type="button"
               aria-label="Move text"
-              className="absolute flex h-8 w-8 touch-none items-center justify-center rounded bg-white text-black shadow"
-              style={{ left: editing.x * s - 36, top: editing.y * s + (box.h * s) / 2 - 16 }}
+              className="absolute flex h-6 w-6 touch-none items-center justify-center rounded bg-white text-black shadow"
+              style={{ left: editing.x * s - 30 / zoom, top: editing.y * s + (box.h * s) / 2 - 12 / zoom, transform: `scale(${1 / zoom})`, transformOrigin: "0 0" }}
               onPointerDown={(e) => {
                 e.preventDefault();
                 (e.target as Element).setPointerCapture(e.pointerId);
@@ -420,31 +522,33 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
               onPointerMove={(e) => {
                 const g = gripRef.current;
                 if (!g) return;
-                setEditing((ed) => (ed ? { ...ed, x: g.ox + (e.clientX - g.sx) / s, y: g.oy + (e.clientY - g.sy) / s } : ed));
+                setEditing((ed) => (ed ? { ...ed, x: g.ox + (e.clientX - g.sx) / (s * zoom), y: g.oy + (e.clientY - g.sy) / (s * zoom) } : ed));
               }}
               onPointerUp={() => {
                 gripRef.current = null;
                 typeRef.current?.focus({ preventScroll: true });
               }}
             >
-              <GripVertical size={16} />
+              <GripVertical size={13} />
             </button>
           )}
           {editing && (
             <button
               type="button"
               aria-label="Drag to resize text"
-              className="absolute h-6 w-6 touch-none rounded-[3px] border-2 border-white bg-[#062932] shadow"
+              className="absolute flex h-7 w-7 touch-none items-center justify-center"
               style={{
-                left: editing.x * s + Math.max(box.w * s + fontPx, fontPx * 3) - 12,
-                top: editing.y * s + box.h * s - 10,
+                left: editing.x * s + Math.max(box.w * s + fontPx, fontPx * 3) - 14 / zoom,
+                top: editing.y * s + box.h * s - 14 / zoom,
+                transform: `scale(${1 / zoom})`,
+                transformOrigin: "0 0",
               }}
               onPointerDown={(e) => {
                 e.preventDefault();
                 (e.target as Element).setPointerCapture(e.pointerId);
                 const r = canvasRef.current!.getBoundingClientRect();
-                const ax = r.left + editing.x * s;
-                const ay = r.top + editing.y * s;
+                const ax = r.left + editing.x * s * zoom;
+                const ay = r.top + editing.y * s * zoom;
                 cornerRef.current = { ax, ay, d0: Math.max(20, Math.hypot(e.clientX - ax, e.clientY - ay)), size0: editing.size };
               }}
               onPointerMove={(e) => {
@@ -459,7 +563,9 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
                 cornerRef.current = null;
                 typeRef.current?.focus({ preventScroll: true });
               }}
-            />
+            >
+              <span className="block h-3 w-3 rounded-[2px] border-[1.5px] border-white bg-[#062932] shadow" />
+            </button>
           )}
         </div>
       </div>
