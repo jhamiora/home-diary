@@ -12,7 +12,7 @@ import { MorePage } from "./pages/MorePage";
 
 const TABS: { id: Tab; label: string; Icon: LucideIcon }[] = [
   { id: "today", label: "Today", Icon: Sun },
-  { id: "site", label: "Site Diary", Icon: ClipboardList },
+  { id: "site", label: "Task Builder", Icon: ClipboardList },
   { id: "materials", label: "Materials", Icon: Package },
   { id: "more", label: "More", Icon: Menu },
 ];

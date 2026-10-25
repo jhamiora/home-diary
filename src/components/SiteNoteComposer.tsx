@@ -11,7 +11,7 @@ import { MarkupEditor } from "./MarkupEditor";
 /*
  * The Titus site diary "New site note" box, for the house. Same order:
  * words with the mic, then Materials / Photo / Add note, then
- * Place / Multi / Priority / Today, then materials and photos.
+ * Location / Priority / Do today, then materials and photos.
  * Units are parts of the house. The box stays open after each note.
  */
 
@@ -87,7 +87,6 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
   const [draft, setDraft] = useStoredState<Draft>("composer:draft", emptyDraft());
   // The place sticks between notes, like the site diary's unit.
   const [picked, setPicked] = useStoredState<string[]>("composer:places", [WHOLE_HOUSE]);
-  const [multi, setMulti] = useStoredState("composer:multi", false);
   const [showMaterial, setShowMaterial] = useState(draft.materials.length > 0);
   const [materialText, setMaterialText] = useState("");
   const [newPlace, setNewPlace] = useState("");
@@ -108,8 +107,8 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
 
   const patch = (p: Partial<Draft>) => setDraft((d) => ({ ...d, ...p }));
   const validPicked = picked.filter((p) => p === WHOLE_HOUSE || p === OUTSIDE || places.includes(p));
-  const placesPicked = validPicked.length ? validPicked : [WHOLE_HOUSE];
-  const placeSummary = placesPicked.length > 1 ? `${placesPicked.length} places` : placeLabel(placesPicked[0]);
+  const placesPicked = [validPicked[0] ?? WHOLE_HOUSE];
+  const placeSummary = placeLabel(placesPicked[0]);
 
   useEffect(() => () => rec.current?.stop(), []);
 
@@ -161,13 +160,8 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
   };
 
   const pickPlace = (p: string) => {
-    if (!multi || p === WHOLE_HOUSE || p === OUTSIDE) {
-      setPicked([p]);
-      if (!multi) setPlaceOpen(false);
-      return;
-    }
-    const without = placesPicked.filter((x) => x !== WHOLE_HOUSE && x !== OUTSIDE && x !== p);
-    setPicked(placesPicked.includes(p) ? (without.length ? without : [WHOLE_HOUSE]) : [...without, p]);
+    setPicked([p]);
+    setPlaceOpen(false);
   };
 
   const close = async () => {
@@ -275,21 +269,23 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
               type="button"
               aria-pressed={showMaterial}
               onClick={() => setShowMaterial(!showMaterial)}
-              className={`relative flex h-9 min-w-9 flex-1 items-center justify-center gap-1.5 rounded border px-2.5 text-[14px] font-semibold ${
+              className={`relative flex h-9 min-w-0 flex-1 basis-0 items-center justify-center gap-1.5 rounded border px-2.5 text-[14px] font-semibold ${
                 showMaterial ? "border-navy bg-navy text-white" : "border-navy text-navy"
               }`}
             >
               <Package size={16} className="shrink-0" />
               <span className="truncate">Materials</span>
               {draft.materials.length > 0 && (
-                <span className={`rounded px-1 text-[11px] ${showMaterial ? "bg-white/20" : "bg-navy text-white"}`}>{draft.materials.length}</span>
+                <span className="pointer-events-none absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded bg-ok px-1 text-[10px] text-white">
+                  {draft.materials.length}
+                </span>
               )}
             </button>
             <button
               type="button"
               disabled={draft.photoIds.length >= MAX_PHOTOS}
               onClick={() => camInput.current?.click()}
-              className="flex h-9 shrink-0 items-center gap-1.5 rounded border border-navy px-2.5 text-[14px] font-semibold text-navy disabled:opacity-40"
+              className="flex h-9 min-w-0 flex-1 basis-0 items-center justify-center gap-1.5 rounded border border-navy px-2.5 text-[14px] font-semibold text-navy disabled:opacity-40"
             >
               <Camera size={16} />
               Photo
@@ -300,13 +296,12 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
               onClick={submit}
               className="h-9 shrink-0 rounded bg-navy px-3 text-[14px] font-medium text-white disabled:opacity-40"
             >
-              {placesPicked.length > 1 ? `Add ${placesPicked.length} notes` : "Add note"}
+              Add note
             </button>
           </div>
         </div>
 
         <div className="flex min-w-0 items-center gap-1.5">
-          <div className="flex shrink-0 items-center gap-1">
             <button
               ref={placeBtn}
               type="button"
@@ -316,17 +311,6 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
               <span className="max-w-[8rem] truncate">{placeSummary}</span>
               <ChevronDown size={12} className="opacity-50" />
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMulti(!multi);
-                if (multi && placesPicked.length > 1) setPicked([placesPicked[0]]);
-              }}
-              className={`whitespace-nowrap rounded px-2 py-1.5 text-[12px] font-medium ${multi ? "bg-navy text-white" : "bg-soft text-muted"}`}
-            >
-              Multi
-            </button>
-          </div>
           <button
             ref={priorityBtn}
             type="button"
@@ -407,9 +391,6 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
         </div>
         {draft.photoIds.length > 0 && <p className="-mt-2 text-[11px] text-muted">Tap the pencil on a photo to mark it up before saving.</p>}
 
-        {placesPicked.length > 1 && (
-          <p className="text-[12px] text-muted">{placesPicked.length} separate notes, one per place.</p>
-        )}
       </div>
 
       <input ref={camInput} type="file" accept="image/*" capture="environment" hidden onChange={(e) => addPhotos(e.target.files)} />
@@ -438,11 +419,8 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
             const n = addPlace(newPlace);
             if (n) {
               setNewPlace("");
-              if (multi) setPicked([...placesPicked.filter((x) => x !== WHOLE_HOUSE && x !== OUTSIDE), n]);
-              else {
-                setPicked([n]);
-                setPlaceOpen(false);
-              }
+              setPicked([n]);
+              setPlaceOpen(false);
             }
           }}
         >

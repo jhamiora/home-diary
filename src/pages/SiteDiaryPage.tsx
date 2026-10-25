@@ -61,7 +61,7 @@ export function SiteDiaryPage() {
       <div className="sticky top-0 z-30 border-b border-line bg-white/95 backdrop-blur">
         <div className="flex items-center justify-between gap-3 px-4 py-3">
           <div>
-            <h1 className="font-display text-[20px] font-extrabold uppercase leading-none tracking-[-0.02em]">Site Diary</h1>
+            <h1 className="font-display text-[20px] font-extrabold uppercase leading-none tracking-[-0.02em]">Task Builder</h1>
             <p className="mt-1 text-[11px] tracking-[0.04em] text-muted">Jobs, photos &amp; materials around the house</p>
           </div>
           <div className="seg shrink-0">

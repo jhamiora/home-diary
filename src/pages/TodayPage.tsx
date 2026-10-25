@@ -13,7 +13,7 @@ function PlanSheet({ open, onClose, jobs }: { open: boolean; onClose: () => void
   const openJobs = jobs.filter(isOpen).sort(byPriority);
   return (
     <Sheet open={open} onClose={onClose} title="Pick today's jobs">
-      {!openJobs.length && <p className="px-4 pb-4 text-[14px] text-muted">No open jobs. Add some on the Site Diary tab.</p>}
+      {!openJobs.length && <p className="px-4 pb-4 text-[14px] text-muted">No open jobs. Add some on the Task Builder tab.</p>}
       {PRIORITIES.map((p) => {
         const list = openJobs.filter((j) => j.priority === p.value);
         if (!list.length) return null;
