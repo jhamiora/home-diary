@@ -268,6 +268,35 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
 
         </div>
 
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            aria-pressed={showMaterial}
+            onClick={() => setShowMaterial(!showMaterial)}
+            className={`relative flex h-10 items-center justify-center gap-1.5 rounded border text-[14px] font-medium ${
+              showMaterial ? "border-navy bg-navy text-white" : "border-line"
+            }`}
+          >
+            <Package size={16} />
+            Materials
+            {draft.materials.length > 0 && (
+              <span className="pointer-events-none absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded bg-ok px-1 text-[10px] text-white">
+                {draft.materials.length}
+              </span>
+            )}
+          </button>
+          <button
+            ref={photoBtn}
+            type="button"
+            disabled={draft.photoIds.length >= MAX_PHOTOS}
+            onClick={() => setPhotoMenu(true)}
+            className="flex h-10 items-center justify-center gap-1.5 rounded border border-line text-[14px] font-medium disabled:opacity-40"
+          >
+            <Camera size={16} />
+            Photo
+          </button>
+        </div>
+
         <div className="flex min-w-0 gap-1.5">
           <button
             ref={placeBtn}
@@ -297,35 +326,6 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
           >
             <Sun size={13} fill={draft.today ? "currentColor" : "none"} />
             Do today
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            aria-pressed={showMaterial}
-            onClick={() => setShowMaterial(!showMaterial)}
-            className={`relative flex h-10 items-center justify-center gap-1.5 rounded border text-[14px] font-medium ${
-              showMaterial ? "border-navy bg-navy text-white" : "border-line"
-            }`}
-          >
-            <Package size={16} />
-            Materials
-            {draft.materials.length > 0 && (
-              <span className="pointer-events-none absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded bg-ok px-1 text-[10px] text-white">
-                {draft.materials.length}
-              </span>
-            )}
-          </button>
-          <button
-            ref={photoBtn}
-            type="button"
-            disabled={draft.photoIds.length >= MAX_PHOTOS}
-            onClick={() => setPhotoMenu(true)}
-            className="flex h-10 items-center justify-center gap-1.5 rounded border border-line text-[14px] font-medium disabled:opacity-40"
-          >
-            <Camera size={16} />
-            Photo
           </button>
         </div>
 
