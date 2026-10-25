@@ -102,9 +102,12 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
   const draftRef = useRef<Shape | null>(null);
   const dragRef = useRef<{ index: number; sx: number; sy: number; ox: number; oy: number; moved: boolean } | null>(null);
   const gripRef = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
+  const cornerRef = useRef<{ ax: number; ay: number; d0: number; size0: number } | null>(null);
   const [shapes, setShapes] = useState<Shape[]>([]);
   const [tool, setTool] = useState<Tool>("arrow");
   const [color, setColor] = useState(COLORS[0]);
+  // Last text size used, so the next label starts the same size.
+  const [lastSize, setLastSize] = useState<number | null>(null);
   const [ready, setReady] = useState(false);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [saving, setSaving] = useState(false);
@@ -275,7 +278,7 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
         return;
       }
       const { x, y } = toImage(e);
-      const size = scaleUnit() / 22;
+      const size = lastSize ?? scaleUnit() / 22;
       startTyping({ x, y: y - (size * LINE_HEIGHT) / 2, text: "", color, size });
       return;
     }
@@ -427,6 +430,37 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
               <GripVertical size={16} />
             </button>
           )}
+          {editing && (
+            <button
+              type="button"
+              aria-label="Drag to resize text"
+              className="absolute h-6 w-6 touch-none rounded-[3px] border-2 border-white bg-[#062932] shadow"
+              style={{
+                left: editing.x * s + Math.max(box.w * s + fontPx, fontPx * 3) - 12,
+                top: editing.y * s + box.h * s - 10,
+              }}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                (e.target as Element).setPointerCapture(e.pointerId);
+                const r = canvasRef.current!.getBoundingClientRect();
+                const ax = r.left + editing.x * s;
+                const ay = r.top + editing.y * s;
+                cornerRef.current = { ax, ay, d0: Math.max(20, Math.hypot(e.clientX - ax, e.clientY - ay)), size0: editing.size };
+              }}
+              onPointerMove={(e) => {
+                const c = cornerRef.current;
+                if (!c) return;
+                const unit = scaleUnit();
+                const size = Math.min(unit / 4, Math.max(unit / 70, (c.size0 * Math.hypot(e.clientX - c.ax, e.clientY - c.ay)) / c.d0));
+                setEditing((ed) => (ed ? { ...ed, size } : ed));
+                setLastSize(size);
+              }}
+              onPointerUp={() => {
+                cornerRef.current = null;
+                typeRef.current?.focus({ preventScroll: true });
+              }}
+            />
+          )}
         </div>
       </div>
 
@@ -445,7 +479,7 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
         </div>
         {editing ? (
           <div className="flex items-center justify-between gap-3">
-            <p className="text-[12px] text-white/60">Type on the photo. Enter for a new line. Drag the grip to move it.</p>
+            <p className="text-[12px] leading-snug text-white/60">Drag the grip to move. Drag the corner square to resize.</p>
             <button
               className="flex h-10 shrink-0 items-center gap-1.5 rounded bg-white px-4 text-[14px] font-semibold text-black"
               onPointerDown={(e) => e.preventDefault()}
@@ -471,7 +505,7 @@ export function MarkupEditor({ photoId, onClose }: { photoId: string; onClose: (
           </div>
         )}
         {tool === "text" && !editing && (
-          <p className="pt-2 text-center text-[12px] text-white/60">Tap the photo to type. Drag text to move it, tap it to edit.</p>
+          <p className="pt-2 text-center text-[12px] text-white/60">Tap the photo to type. Drag text to move it, tap it to edit or resize.</p>
         )}
       </div>
     </div>
