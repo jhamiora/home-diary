@@ -104,9 +104,10 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
   const addPhotos = async (files: FileList | null) => {
     if (!files?.length) return;
     const room = MAX_PHOTOS - draft.photoIds.length;
-    const ids = await savePhotoFiles(Array.from(files).slice(0, room));
+    const { ids, failed } = await savePhotoFiles(Array.from(files).slice(0, room));
     if (ids.length) setDraft((d) => ({ ...d, photoIds: [...d.photoIds, ...ids] }));
-    if (files.length > room) toast(`Up to ${MAX_PHOTOS} photos a note`);
+    if (failed) toast(failed > 1 ? `${failed} photos couldn't be read` : "That photo couldn't be read");
+    else if (files.length > room) toast(`Up to ${MAX_PHOTOS} photos a note`);
     if (camInput.current) camInput.current.value = "";
     if (galInput.current) galInput.current.value = "";
   };
@@ -140,7 +141,11 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
   };
 
   const submit = async () => {
-    const text = draft.text.trim();
+    // Close the keyboard first so it commits the word it is still holding;
+    // otherwise Gboard puts the old words back after the box clears.
+    const el = textRef.current;
+    const text = (el?.value ?? draft.text).trim();
+    el?.blur();
     if (!text || busy) return;
     setBusy(true);
     stopDictation();
@@ -176,8 +181,11 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
       toast(ids.length > 1 ? `${ids.length} notes added` : "Note added");
       setDraft(emptyDraft({ priority: draft.priority }));
       setMaterialText("");
+      if (el) el.value = "";
+      requestAnimationFrame(() => {
+        if (textRef.current) textRef.current.value = "";
+      });
       onAdded?.(ids);
-      textRef.current?.focus();
     } finally {
       setBusy(false);
     }

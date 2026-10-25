@@ -116,7 +116,8 @@ function JobDetailInner({ job, onClose }: { job: Job; onClose: () => void }) {
   const addPhotos = async (files: FileList | null) => {
     if (!files?.length) return;
     const room = MAX_PHOTOS - job.photoIds.length;
-    const ids = await savePhotoFiles(Array.from(files).slice(0, room));
+    const { ids, failed } = await savePhotoFiles(Array.from(files).slice(0, room));
+    if (failed) toast(failed > 1 ? `${failed} photos couldn't be read` : "That photo couldn't be read");
     if (ids.length) {
       const fresh = await db.jobs.get(job.id);
       await patch({ photoIds: [...(fresh?.photoIds ?? []), ...ids] });
