@@ -10,6 +10,7 @@ import { appendSaid, dictationSupported, useDictation } from "../lib/dictation";
 import { PhotoThumb, PhotoViewer } from "./Photos";
 import { LocationMenu, PRIORITY_DOT, PriorityMenu } from "./Pickers";
 import { useJobActions } from "./JobRow";
+import { useGoTab } from "../lib/nav";
 
 /*
  * Edit a task, laid out like the add box (mockup A): the words with the mic,
@@ -57,6 +58,7 @@ export function JobDetail({ jobId, onClose }: { jobId: string; onClose: () => vo
 function JobDetailInner({ job, onClose }: { job: Job; onClose: () => void }) {
   const toast = useToast();
   const { setDone, setToday } = useJobActions();
+  const goTab = useGoTab();
   const [title, setTitle] = useState(job.title);
   const [notesText, setNotesText] = useState(job.notes);
   const [materialText, setMaterialText] = useState("");
@@ -100,11 +102,16 @@ function JobDetailInner({ job, onClose }: { job: Job; onClose: () => void }) {
 
   const patch = (p: Partial<Job>) => db.jobs.update(job.id, { ...p, updatedAt: Date.now() });
 
+  // Save is always live: it keeps any typed changes and goes back to Task Builder.
+  // Taps on tags, ticks and photos have already saved themselves.
   const save = async () => {
-    if (!title.trim()) return toast("The task needs some words");
-    await patch({ title: title.trim(), notes: notesText });
-    setTitle(title.trim());
+    const words = (titleRef.current?.value ?? title).trim();
+    if (!words) return toast("The task needs some words");
+    titleRef.current?.blur();
+    if (words !== job.title || notesText !== job.notes) await patch({ title: words, notes: notesText });
     toast("Saved");
+    onClose();
+    goTab("site");
   };
 
   const addMaterial = () => {
@@ -154,11 +161,7 @@ function JobDetailInner({ job, onClose }: { job: Job; onClose: () => void }) {
         </span>
       }
       right={
-        <button
-          className={`mr-1 h-9 rounded px-4 text-[14px] font-semibold ${dirty ? "bg-ok text-white" : "bg-soft text-[#a3abb2]"}`}
-          disabled={!dirty}
-          onClick={save}
-        >
+        <button className="mr-1 h-9 rounded bg-ok px-4 text-[14px] font-semibold text-white active:opacity-90" onClick={save}>
           Save
         </button>
       }
