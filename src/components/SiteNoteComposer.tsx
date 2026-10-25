@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Camera, CheckCircle, ImagePlus, MapPin, Mic, Package, PenLine, Square, X } from "lucide-react";
 import { PRIORITIES, askPersistentStorage, db, dayKey, uid, type Job, type Material, type Priority } from "../lib/db";
 import { OUTSIDE, WHOLE_HOUSE, parseMaterial, placeLabel, usePlaces } from "../lib/places";
 import { lineLabel } from "../lib/materials";
 import { savePhotoFiles, usePhotoUrl } from "../lib/photos";
 import { MenuLabel, Pop, useStoredState, useToast } from "../lib/ui";
+import { appendSaid, dictationSupported, useDictation } from "../lib/dictation";
 import { PhotoViewer } from "./Photos";
 import { MarkupEditor } from "./MarkupEditor";
 
@@ -41,20 +42,6 @@ const emptyDraft = (keep?: Partial<Draft>): Draft => ({
   today: false,
   ...keep,
 });
-
-type SpeechRec = {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  start: () => void;
-  stop: () => void;
-  onresult: (e: { resultIndex: number; results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }> }) => void;
-  onend: () => void;
-  onerror: () => void;
-};
-
-const SpeechRecognitionCtor = (window as unknown as { SpeechRecognition?: new () => SpeechRec; webkitSpeechRecognition?: new () => SpeechRec })
-  .SpeechRecognition ?? (window as unknown as { webkitSpeechRecognition?: new () => SpeechRec }).webkitSpeechRecognition;
 
 function StagedThumb({ id, onView, onMarkup, onRemove }: { id: string; onView: () => void; onMarkup: () => void; onRemove: () => void }) {
   const url = usePhotoUrl(id, "thumb");
@@ -97,48 +84,22 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
   const [photoMenu, setPhotoMenu] = useState(false);
   const [viewAt, setViewAt] = useState<number | null>(null);
   const [markupId, setMarkupId] = useState<string | null>(null);
-  const [listening, setListening] = useState(false);
   const [busy, setBusy] = useState(false);
   const placeBtn = useRef<HTMLButtonElement>(null);
   const priorityBtn = useRef<HTMLButtonElement>(null);
   const photoBtn = useRef<HTMLButtonElement>(null);
   const camInput = useRef<HTMLInputElement>(null);
   const galInput = useRef<HTMLInputElement>(null);
-  const rec = useRef<SpeechRec | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
 
   const patch = (p: Partial<Draft>) => setDraft((d) => ({ ...d, ...p }));
+  const { listening, toggle: toggleDictation, stop: stopDictation } = useDictation(
+    (said) => setDraft((d) => ({ ...d, text: appendSaid(d.text, said) })),
+    () => toast("Dictation didn't work, try again"),
+  );
   const validPicked = picked.filter((p) => p === WHOLE_HOUSE || p === OUTSIDE || places.includes(p));
   const placesPicked = [validPicked[0] ?? WHOLE_HOUSE];
   const placeSummary = placeLabel(placesPicked[0]);
-
-  useEffect(() => () => rec.current?.stop(), []);
-
-  const toggleDictation = () => {
-    if (listening) {
-      rec.current?.stop();
-      return;
-    }
-    if (!SpeechRecognitionCtor) return;
-    const r = new SpeechRecognitionCtor();
-    r.continuous = true;
-    r.interimResults = false;
-    r.lang = "en-NZ";
-    r.onresult = (e) => {
-      let said = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) said += e.results[i][0].transcript;
-      said = said.trim();
-      if (said) setDraft((d) => ({ ...d, text: d.text.trim() ? `${d.text.trim()} ${said}` : said.charAt(0).toUpperCase() + said.slice(1) }));
-    };
-    r.onend = () => setListening(false);
-    r.onerror = () => {
-      setListening(false);
-      toast("Dictation didn't work, try again");
-    };
-    rec.current = r;
-    r.start();
-    setListening(true);
-  };
 
   const addPhotos = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -167,7 +128,7 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
   };
 
   const close = async () => {
-    rec.current?.stop();
+    stopDictation();
     onClose();
   };
 
@@ -182,7 +143,7 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
     const text = draft.text.trim();
     if (!text || busy) return;
     setBusy(true);
-    rec.current?.stop();
+    stopDictation();
     try {
       const now = Date.now();
       const ids: string[] = [];
@@ -246,12 +207,12 @@ export function SiteNoteComposer({ onClose, onAdded }: { onClose: () => void; on
             <textarea
               ref={textRef}
               className="field min-h-[80px] resize-none pr-12 leading-snug"
-              placeholder={SpeechRecognitionCtor ? "What needs doing? (or tap mic to dictate)" : "What needs doing?"}
+              placeholder={dictationSupported ? "What needs doing? (or tap mic to dictate)" : "What needs doing?"}
               value={draft.text}
               readOnly={listening}
               onChange={(e) => patch({ text: e.target.value })}
             />
-            {SpeechRecognitionCtor && (
+            {dictationSupported && (
               <button
                 type="button"
                 aria-label={listening ? "Stop dictation" : "Dictate"}
